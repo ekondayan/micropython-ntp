@@ -18,20 +18,6 @@ try:
 except ImportError:
     import re
 
-# import machine
-
-# Features:
-# 1. calculate and compensate RTC drift
-# 2. timezones
-# 3. epochs
-# 4. Get time in sec, ms and us
-# 5. multiple servers
-# 6. Logger with callback function
-
-# TODO:
-# 7. extra precision - take into account the time required to call the functions and compensate for that
-# 8. daylight saving time
-
 
 class Ntp:
     EPOCH_1900 = 0
@@ -43,7 +29,6 @@ class Ntp:
     _NTP_DELTA_1970_2000 = 946684800   # Seconds between 1970 and 2000 = _NTP_DELTA_1900_2000 - _NTP_DELTA_1900_1970
 
     _logger = print
-    # _extra_precision: bool = False
     _rtc = machine.RTC()
     _hosts: list = []
     _timezone: int = 0
@@ -52,22 +37,6 @@ class Ntp:
     _drift_last_calculate: int = 0
     _ppm_drift: float = 0.0
     _ntp_timeout_s: int = 1
-
-    # _dst_start_month = None
-    # _dst_start_dow = None
-    # _dst_start_hour = None
-    #
-    # _dst_end_month = None
-    # _dst_end_dow = None
-    # _dst_end_hour = None
-
-    # @classmethod
-    # def set_extra_precision(cls, on: bool = False):
-    #     cls._extra_precision = on
-    #
-    # @classmethod
-    # def extra_precision(cls):
-    #     return cls._extra_precision
 
     @classmethod
     def set_logger(cls, callback = None):
@@ -140,9 +109,6 @@ class Ntp:
 
         return (time.time() + epoch + cls._timezone + dst) * 1000000 + cls._rtc.datetime()[7]
 
-        # +(250000 cpu ticks * (1000000 // frequency))us will negate the execution time of the below return statement
-        # return ((time.time() + epoch + cls._timezone + dst) * 1000000 + cls._rtc.datetime()[7]) + (250000000000 // machine.freq())
-
     @classmethod
     def network_time(cls, epoch: int = None):
         if not any(cls._hosts):
@@ -190,8 +156,6 @@ class Ntp:
 
         # Negate the execution time of all the instructions up to this point
         ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1])
-        # +(115000 cpu ticks * (1000000 // frequency))us will negate the execution time of the functions localtime() and datetime()
-        # ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1]) + (115000000000 // machine.freq())
         lt = time.localtime(ntp_us // 1000000)
         cls._rtc.datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000000))
         cls._rtc_last_sync = ntp_us
@@ -269,8 +233,6 @@ class Ntp:
     @classmethod
     def drift_compensate(cls, compensate_us: int):
         rtc_us = cls.time_us(Ntp.EPOCH_2000)
-        # +(115000 cpu ticks * (1000000 / frequency)) will negate the execution time of the functions localtime() and datetime()
-        # rtc_us += int(compensate_us + 115000000000 // machine.freq())
         rtc_us += compensate_us
         lt = time.localtime(rtc_us // 1000000)
         cls._rtc.datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000000))
@@ -293,8 +255,6 @@ class Ntp:
             return False
 
         return True
-        # allowed = re.compile(r'(?!-)[a-z0-9-]{1,63}(?<!-)$', re.IGNORECASE)
-        # return all(allowed.match(label) for label in labels)
 
     @classmethod
     def _log(cls, message: str):
