@@ -18,7 +18,7 @@ try:
 except ImportError:
     import re
 
-import machine
+# import machine
 
 # Features:
 # 1. calculate and compensate RTC drift

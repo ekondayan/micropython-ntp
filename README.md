@@ -158,7 +158,7 @@ The default logger is set to the function `print()`. To disable error logging, j
 
 * Module re
 
-* Module machine - from micropython
+* 
 
 # <u>Download</u>
 
