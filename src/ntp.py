@@ -18,11 +18,40 @@ try:
 except ImportError:
     import re
 
+import machine
+
 
 class Ntp:
     EPOCH_1900 = 0
     EPOCH_1970 = 1
     EPOCH_2000 = 2
+
+    DST_MONTH_JAN = 1
+    DST_MONTH_FEB = 2
+    DST_MONTH_MAR = 3
+    DST_MONTH_APR = 4
+    DST_MONTH_MAY = 5
+    DST_MONTH_JUN = 6
+    DST_MONTH_JUL = 7
+    DST_MONTH_AUG = 8
+    DST_MONTH_SEP = 9
+    DST_MONTH_OCT = 10
+    DST_MONTH_NOV = 11
+    DST_MONTH_DEC = 12
+
+    DST_WEEK_FIRST = 1
+    DST_WEEK_SECOND = 2
+    DST_WEEK_THIRD = 3
+    DST_WEEK_FORTH = 4
+    DST_WEEK_LAST = 5
+
+    DST_DOW_MON = 1
+    DST_DOW_TUE = 2
+    DST_DOW_WED = 3
+    DST_DOW_THU = 4
+    DST_DOW_FRI = 5
+    DST_DOW_SAT = 6
+    DST_DOW_SUN = 7
 
     _NTP_DELTA_1900_1970 = 2208988800  # Seconds between 1900 and 1970
     _NTP_DELTA_1900_2000 = 3155673600  # Seconds between 1900 and 2000
@@ -37,6 +66,34 @@ class Ntp:
     _drift_last_calculate: int = 0
     _ppm_drift: float = 0.0
     _ntp_timeout_s: int = 1
+
+    _dst_start: dict
+    _dst_end: dict
+    _dst_bias: int
+
+    @classmethod
+    def set_dst_start(cls, month: int, week: int, dow: int):
+        pass
+
+    @classmethod
+    def get_dst_start(cls):
+        pass
+
+    @classmethod
+    def set_dst_end(cls, month: int, week: int, dow: int):
+        pass
+
+    @classmethod
+    def get_dst_end(cls):
+        pass
+
+    @classmethod
+    def set_dst_time_bias(cls, bias: int):
+        pass
+
+    @classmethod
+    def get_dst_time_bias(cls):
+        passs
 
     @classmethod
     def set_logger(cls, callback = None):
@@ -93,12 +150,7 @@ class Ntp:
 
     @classmethod
     def time_us(cls, epoch: int = None):
-        epochs = (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0)
-        try:
-            epoch = epochs[epoch]
-        except (IndexError, TypeError):
-            epoch = epochs[cls.EPOCH_2000]
-
+        epoch = cls._normalize_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
         dst = 0
 
         # Do not take the value when on the verge of the next second
@@ -110,16 +162,11 @@ class Ntp:
         return (time.time() + epoch + cls._timezone + dst) * 1000000 + cls._rtc.datetime()[7]
 
     @classmethod
-    def network_time(cls, epoch: int = None):
+    def network_time(cls, epoch = None):
         if not any(cls._hosts):
             raise Exception('There are no valid Hostnames/IPs set for the time server')
 
-        epochs = (0, cls._NTP_DELTA_1900_1970, cls._NTP_DELTA_1900_2000)
-        try:
-            epoch = epochs[epoch]
-        except (IndexError, TypeError):
-            epoch = 0
-
+        epoch = cls._normalize_epoch(epoch, (0, cls._NTP_DELTA_1900_1970, cls._NTP_DELTA_1900_2000))
         query = bytearray(48)
         query[0] = 0x1B
 
@@ -162,12 +209,7 @@ class Ntp:
 
     @classmethod
     def rtc_last_sync(cls, epoch: int = None):
-        epochs = (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0)
-        try:
-            epoch = epochs[epoch]
-        except (IndexError, TypeError):
-            epoch = epochs[cls.EPOCH_2000]
-
+        epoch = cls._normalize_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
         return cls._rtc_last_sync + epoch * 1000000
 
     @classmethod
@@ -189,22 +231,12 @@ class Ntp:
 
     @classmethod
     def drift_last_compensate(cls, epoch: int = None):
-        epochs = (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0)
-        try:
-            epoch = epochs[epoch]
-        except (IndexError, TypeError):
-            epoch = epochs[cls.EPOCH_2000]
-
+        epoch = cls._normalize_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
         return cls._drift_last_compensate + epoch * 1000000
 
     @classmethod
     def drift_last_calculate(cls, epoch: int = None):
-        epochs = (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0)
-        try:
-            epoch = epochs[epoch]
-        except (IndexError, TypeError):
-            epoch = epochs[cls.EPOCH_2000]
-
+        epoch = cls._normalize_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
         return cls._drift_last_calculate + epoch * 1000000
 
     @classmethod
@@ -225,10 +257,10 @@ class Ntp:
         if ppm_drift is None:
             ppm_drift = cls._ppm_drift
 
-        time = cls.time_us(cls.EPOCH_2000) - max(cls._rtc_last_sync, cls._drift_last_compensate)
-        time_real = (1000000 * time) // (1000000 + ppm_drift)
+        delta_time_rtc = cls.time_us(cls.EPOCH_2000) - max(cls._rtc_last_sync, cls._drift_last_compensate)
+        delta_time_real = (1000000 * delta_time_rtc) // (1000000 + ppm_drift)
 
-        return time - time_real
+        return delta_time_rtc - delta_time_real
 
     @classmethod
     def drift_compensate(cls, compensate_us: int):
@@ -236,7 +268,6 @@ class Ntp:
         rtc_us += compensate_us
         lt = time.localtime(rtc_us // 1000000)
         cls._rtc.datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000000))
-        # cls._rtc_last_sync = rtc_us
         cls._drift_last_compensate = rtc_us
 
     @staticmethod
@@ -255,6 +286,18 @@ class Ntp:
             return False
 
         return True
+
+    @classmethod
+    def _normalize_epoch(cls, epoch, epoch_list):
+        if not isinstance(epoch_list, tuple):
+            raise Exception('Invalid parameter: epoch_list must be a tuple')
+
+        if isinstance(epoch, int) and epoch in (0, 1, 2):
+            return epoch_list[epoch]
+        elif epoch is None:
+            return 0
+        else:
+            raise Exception('Invalid parameter: epoch')
 
     @classmethod
     def _log(cls, message: str):

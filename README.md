@@ -12,15 +12,17 @@ A robust MicroPython **Time library** for manipulating the **RTC** and and synci
 
 2. Multiple NTP hosts
 
-3. Calculate and compensate RTC drift
+3. Microsecond precision
 
-4. Timezones
+4. Calculate and compensate RTC drift
 
-5. Epochs
+5. Timezones
 
-6. Get time in sec, ms and us
+6. Epochs
 
-7. Custom Logger with callback function
+7. Get time in sec, ms and us
+
+8. Custom Logger with callback function
 
 <u>Unfinished:</u>
 
