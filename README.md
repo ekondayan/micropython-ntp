@@ -32,7 +32,7 @@ A robust MicroPython **Time library** for manipulating the **RTC** and and synci
 
 3. Robust host validation with regular expressions
 
-*At this point all the implemented features are robustly tested and they seem stable enough for production.*
+***!!!At this point all the implemented features are robustly tested and they seem stable enough for production, BUT I do not recommended to use it in a production environment until the API stabilization phase is finished and some unit tests are developed.!!!***
 
 **RTC sync**
 
