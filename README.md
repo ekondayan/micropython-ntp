@@ -4,11 +4,11 @@
 
 # <u>Description</u>
 
-A robust MicroPython **Time library** for manipulating the **RTC** and and syncing it with **NTP**.
+A robust MicroPython **Time library** for manipulating the **RTC** and and syncing it from a list of **NTP** servers.
 
 <u>Features:</u>
 
-1. Sync the RTC from a list of NTP hosts
+1. Sync the RTC from a NTP host
 
 2. Multiple NTP hosts
 
@@ -20,17 +20,19 @@ A robust MicroPython **Time library** for manipulating the **RTC** and and synci
 
 6. Epochs
 
-7. Get time in sec, ms and us
+7. Day Light Saving Time
 
-8. Custom Logger with callback function
+8. Get time in sec, ms and us
+
+9. Custom Logger with callback function
 
 <u>Unfinished:</u>
 
-1. Extra precision - take into account the time required to call the functions and compensate for that. Thist is a rather controversial feature, which may be not be implemented at all.
+1. Extra precision - take into account the time required to call the functions and compensate for that. This is a rather controversial feature, which may be not be implemented at all.
 
-2. Day Light Saving Time
+2. Robust host validation with regular expressions
 
-3. Robust host validation with regular expressions
+3. Unit tests
 
 ***!!!At this point all the implemented features are robustly tested and they seem stable enough for production, BUT I do not recommended to use it in a production environment until the API stabilization phase is finished and some unit tests are developed.!!!***
 

@@ -172,20 +172,24 @@ class Ntp:
             return 0
 
         date = time.localtime()
+        year = date[0]
         month = date[1]
+        day = date[2]
 
         if cls._dst_start[0] < month < cls._dst_end[0]:
             return cls._dst_bias
         elif month < cls._dst_start[0] or cls._dst_end[0] < month:
             return 0
-
-        # year = date[0]
-        # day = date[2]
-        #
-        # if cls._dst_start[0] == month:
-        #     dst_day = cls._day_from_week_and_weekday(year, month, cls._dst_start[1], cls._dst_start[2])
-        # else:
-        #     dst_day = cls._day_from_week_and_weekday(year, month, cls._dst_end[1], cls._dst_end[2])
+        elif cls._dst_start[0] == month:
+            # Switch time in hours since the beginning of the month
+            switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            if (day * 24 + date[3]) >= switch_hour:
+                return cls._dst_bias
+        else:
+            # Switch time in hours since the beginning of the month
+            switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+            if (day * 24 + date[3]) < switch_hour:
+                return cls._dst_bias
 
         return 0
 
@@ -499,11 +503,11 @@ class Ntp:
         :param month:
         :return:
         """
-        first_sunday = 7 - weekday(year, month, 1)
+        first_sunday = 7 - cls.weekday(year, month, 1)
 
         weeks = list()
         weeks.append((1, first_sunday))
-        _days_in_month = days_in_month(year, month)
+        _days_in_month = cls.days_in_month(year, month)
         for i in range(0, 5):
             if _days_in_month < first_sunday + (i+1) * 7:
                 weeks.append((weeks[i][1] + 1, _days_in_month))
@@ -514,11 +518,22 @@ class Ntp:
         return weeks
 
     @classmethod
-    def _day_from_week_and_weekday(cls, year, month, week, wd):
-        day = weeks_in_month(year, month)[week - 1][0] + wd
-        if day > days_in_month(year, month):
-            raise Exception('Non existent day')
-        return weeks_in_month(year, month)[week - 1][0] + wd
+    def day_from_week_and_weekday(cls, year, month, week, wd):
+        weeks = cls.weeks_in_month(year, month)
+        month_days = cls.days_in_month(year, month)
+
+        day = weeks[week - 1][0] + wd
+
+        if day <= month_days:
+            return day
+
+        # Return the day from last week of the month that contains the weekday
+        for i in range(1, 3):
+            day = weeks[-i][0] + wd
+            if day <= month_days:
+                return day
+
+        raise Exception('Non existent day')
 
     @classmethod
     def _log(cls, message: str):
