@@ -43,15 +43,16 @@ class Ntp:
     DST_WEEK_SECOND = 2
     DST_WEEK_THIRD = 3
     DST_WEEK_FORTH = 4
-    DST_WEEK_LAST = 5
+    DST_WEEK_FIFTH = 5
+    DST_WEEK_SIXTH = 6
 
-    DST_DOW_MON = 1
-    DST_DOW_TUE = 2
-    DST_DOW_WED = 3
-    DST_DOW_THU = 4
-    DST_DOW_FRI = 5
-    DST_DOW_SAT = 6
-    DST_DOW_SUN = 7
+    DST_DOW_MON = 0
+    DST_DOW_TUE = 1
+    DST_DOW_WED = 2
+    DST_DOW_THU = 3
+    DST_DOW_FRI = 4
+    DST_DOW_SAT = 5
+    DST_DOW_SUN = 6
 
     _NTP_DELTA_1900_1970 = 2208988800  # Seconds between 1900 and 1970
     _NTP_DELTA_1900_2000 = 3155673600  # Seconds between 1900 and 2000
@@ -81,29 +82,31 @@ class Ntp:
         :param end:
         :param bias:
         """
+
         cls.set_dst_start(start[0], start[1], start[2], start[3])
         cls.set_dst_end(end[0], end[1], end[2], end[3])
         cls.set_dst_time_bias(bias)
 
     @classmethod
-    def set_dst_start(cls, month: int, week: int, dow: int, hour: int):
+    def set_dst_start(cls, month: int, week: int, weekday: int, hour: int):
         """
 
         :param month:
         :param week:
-        :param dow:
+        :param weekday:
         :param hour:
         """
-        if not isinstance(month, int) or not 1 <= month <= 12:
-            raise ValueError("Invalid parameter: month must be a integer between 1 and 12")
-        elif not isinstance(week, int) or not 1 <= week <= 5:
-            raise ValueError("Invalid parameter: week must be a integer between 1 and 5")
-        elif not isinstance(dow, int) or not 1 <= week <= 7:
-            raise ValueError("Invalid parameter: dow must be a integer between 1 and 7")
-        elif not isinstance(hour, int) or not 0 <= week <= 23:
-            raise ValueError("Invalid parameter: hour must be a integer between 0 and 23")
 
-        cls._dst_start = (month, week, dow, hour)
+        if not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError("Invalid parameter: month={} must be a integer between 1 and 12".format(month))
+        elif not isinstance(week, int) or not 1 <= week <= 6:
+            raise ValueError("Invalid parameter: week={} must be a integer between 1 and 6".format(week))
+        elif not isinstance(weekday, int) or not 0 <= weekday <= 6:
+            raise ValueError("Invalid parameter: weekday={} must be a integer between 0 and 6".format(weekday))
+        elif not isinstance(hour, int) or not 0 <= hour <= 23:
+            raise ValueError("Invalid parameter: hour={} must be a integer between 0 and 23".format(hour))
+
+        cls._dst_start = (month, week, weekday, hour)
 
     @classmethod
     def get_dst_start(cls):
@@ -111,27 +114,29 @@ class Ntp:
 
         :return:
         """
+
         return tuple(cls._dst_start)
 
     @classmethod
-    def set_dst_end(cls, month: int, week: int, dow: int, hour: int):
+    def set_dst_end(cls, month: int, week: int, weekday: int, hour: int):
         """
 
         :param month:
         :param week:
-        :param dow:
+        :param weekday:
         :param hour:
         """
-        if not isinstance(month, int) or not 1 <= month <= 12:
-            raise ValueError("Invalid parameter: month must be a integer between 1 and 12")
-        elif not isinstance(week, int) or not 1 <= week <= 5:
-            raise ValueError("Invalid parameter: week must be a integer between 1 and 5")
-        elif not isinstance(dow, int) or not 1 <= week <= 7:
-            raise ValueError("Invalid parameter: dow must be a integer between 1 and 7")
-        elif not isinstance(hour, int) or not 0 <= week <= 23:
-            raise ValueError("Invalid parameter: hour must be a integer between 0 and 23")
 
-        cls._dst_end = (month, week, dow, hour)
+        if not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError("Invalid parameter: month={} must be a integer between 1 and 12".format(month))
+        elif not isinstance(week, int) or not 1 <= week <= 6:
+            raise ValueError("Invalid parameter: week={} must be a integer between 1 and 6".format(week))
+        elif not isinstance(weekday, int) or not 0 <= weekday <= 6:
+            raise ValueError("Invalid parameter: weekday={} must be a integer between 0 and 6".format(weekday))
+        elif not isinstance(hour, int) or not 0 <= hour <= 23:
+            raise ValueError("Invalid parameter: hour={} must be a integer between 0 and 23".format(hour))
+
+        cls._dst_end = (month, week, weekday, hour)
 
     @classmethod
     def get_dst_end(cls):
@@ -139,6 +144,7 @@ class Ntp:
 
         :return:
         """
+
         return tuple(cls._dst_end)
 
     @classmethod
@@ -147,8 +153,9 @@ class Ntp:
 
         :param bias:
         """
+
         if not isinstance(bias, int) or bias not in (30, 60, 90, 120):
-            raise ValueError("Invalid parameter: time bias represents minutes offset and must be either 30, 60, 90 or 120")
+            raise ValueError("Invalid parameter: bias={} represents minutes offset and must be either 30, 60, 90 or 120".format(bias))
 
         cls._dst_bias = bias
 
@@ -158,6 +165,7 @@ class Ntp:
 
         :return:
         """
+
         return cls._dst_bias
 
     @classmethod
@@ -199,10 +207,11 @@ class Ntp:
 
         :param callback:
         """
+
         if callback is None or callable(callback):
             cls._logger = callback
         else:
-            raise Exception('Callback parameter must be a callable object or None to set it to print()')
+            raise ValueError('Invalid parameter: callback={} must be a callable object or None to set it to print()'.format(callback))
 
     @classmethod
     def set_ntp_timeout(cls, timeout_s: int = 1):
@@ -210,8 +219,9 @@ class Ntp:
 
         :param timeout_s:
         """
-        if not instance(timeout_s, int):
-            raise Exception('Timeout parameter represents seconds in integer form')
+
+        if not isinstance(timeout_s, int):
+            raise ValueError('Invalid parameter: timeout_s={} must be int'.format(timeout_s))
 
         cls._ntp_timeout_s = timeout_s
 
@@ -221,6 +231,7 @@ class Ntp:
 
         :return:
         """
+
         return cls._ntp_timeout_s
 
     @classmethod
@@ -229,6 +240,7 @@ class Ntp:
 
         :return:
         """
+
         return tuple(cls._hosts)
 
     @classmethod
@@ -237,10 +249,11 @@ class Ntp:
 
         :param value:
         """
+
         cls._hosts.clear()
 
         for host in value:
-            if Ntp._validate_hostname(host):
+            if cls._validate_hostname(host):
                 cls._hosts.append(host)
 
     @classmethod
@@ -249,6 +262,7 @@ class Ntp:
 
         :return:
         """
+
         return cls._timezone // 3600, (cls._timezone % 3600) // 60
 
     @classmethod
@@ -258,6 +272,7 @@ class Ntp:
         :param hour:
         :param minute:
         """
+
         if (
                 (minute == 0 and not (-12 <= hour <= 12)) or
                 (minute == 30 and hour not in (-9, -3, 3, 4, 5, 6, 9, 10)) or
@@ -268,30 +283,33 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
-    def time_s(cls, epoch: int = None):
+    def time_s(cls, epoch = None):
         """
 
         :param epoch:
         :return:
         """
+
         return cls.time_us(epoch) // 1000000
 
     @classmethod
-    def time_ms(cls, epoch: int = None):
+    def time_ms(cls, epoch = None):
         """
 
         :param epoch:
         :return:
         """
+
         return cls.time_us(epoch) // 1000
 
     @classmethod
-    def time_us(cls, epoch: int = None):
+    def time_us(cls, epoch = None):
         """
 
         :param epoch:
         :return:
         """
+
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
 
         # Do not take the value when on the verge of the next second
@@ -309,6 +327,7 @@ class Ntp:
         :param epoch:
         :return:
         """
+
         if not any(cls._hosts):
             raise Exception('There are no valid Hostnames/IPs set for the time server')
 
@@ -348,6 +367,7 @@ class Ntp:
         """
 
         """
+
         ntp_reading = cls.network_time(cls.EPOCH_2000)
 
         # Negate the execution time of all the instructions up to this point
@@ -363,6 +383,7 @@ class Ntp:
         :param epoch:
         :return:
         """
+
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
         return cls._rtc_last_sync + epoch * 1000000
 
@@ -372,6 +393,7 @@ class Ntp:
 
         :return:
         """
+
         ntp_reading = cls.network_time(cls.EPOCH_2000)
 
         rtc_us = cls.time_us(Ntp.EPOCH_2000)
@@ -394,6 +416,7 @@ class Ntp:
         :param epoch:
         :return:
         """
+
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
         return cls._drift_last_compensate + epoch * 1000000
 
@@ -404,6 +427,7 @@ class Ntp:
         :param epoch:
         :return:
         """
+
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
         return cls._drift_last_calculate + epoch * 1000000
 
@@ -421,8 +445,10 @@ class Ntp:
 
         :param ppm:
         """
+
         if not isinstance(ppm, (float, int)):
-            raise Exception('ppm parameter must be float or int')
+            raise ValueError('Invalid parameter: ppm={} must be float or int'.format(ppm))
+
         cls._ppm_drift = float(ppm)
 
     @classmethod
@@ -438,6 +464,9 @@ class Ntp:
         if ppm_drift is None:
             ppm_drift = cls._ppm_drift
 
+        if not isinstance(ppm_drift, (float, int)):
+            raise ValueError('Invalid parameter: ppm_drift={} must be float or int'.format(ppm_drift))
+
         delta_time_rtc = cls.time_us(cls.EPOCH_2000) - max(cls._rtc_last_sync, cls._drift_last_compensate)
         delta_time_real = (1000000 * delta_time_rtc) // (1000000 + ppm_drift)
 
@@ -449,6 +478,10 @@ class Ntp:
 
         :param compensate_us:
         """
+
+        if not isinstance(compensate_us, int):
+            raise ValueError('Invalid parameter: compensate_us={} must be int'.format(compensate_us))
+
         rtc_us = cls.time_us(Ntp.EPOCH_2000)
         rtc_us += compensate_us
         lt = time.localtime(rtc_us // 1000000)
@@ -456,7 +489,7 @@ class Ntp:
         cls._drift_last_compensate = rtc_us
 
     @classmethod
-    def weekday(cls, year, month = None, day = None):
+    def weekday(cls, year, month, day):
         """
         Find Weekday using Zeller's Algorithm
         :param year:
@@ -466,11 +499,18 @@ class Ntp:
         :return:
         """
 
-        if month is None:
-            month = 1
+        if not isinstance(year, int) or not 1 <= year:
+            raise ValueError('Invalid parameter: year={} must be int and greater than 0'.format(year))
 
-        if day is None:
-            day = 1
+        if not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError('Invalid parameter: month={} must be int and between 1 and 12'.format(month))
+
+        if not isinstance(day, int):
+            raise ValueError('Invalid parameter: day={} must be int'.format(day))
+        else:
+            days = cls.days_in_month(year, month)
+            if day > days:
+                raise ValueError('Invalid parameter: day={} must be between 1 and {}'.format(day, days))
 
         if month <= 2:
             month += 12
@@ -490,6 +530,13 @@ class Ntp:
         :param month:
         :return:
         """
+
+        if not isinstance(year, int) or not 1 <= year:
+            raise ValueError('Invalid parameter: year={} must be int and greater than 0'.format(year))
+
+        if not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError('Invalid parameter: month={} must be int and between 1 and 12'.format(month))
+
         days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
         if (year % 400 == 0) or ((year % 4 == 0) and (year % 100 != 0)):
             days[1] += 1
@@ -503,8 +550,14 @@ class Ntp:
         :param month:
         :return:
         """
-        first_sunday = 7 - cls.weekday(year, month, 1)
 
+        if not isinstance(year, int) or not 1 <= year:
+            raise ValueError('Invalid parameter: year={} must be int and greater than 0'.format(year))
+
+        if not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError('Invalid parameter: month={} must be int and between 1 and 12'.format(month))
+
+        first_sunday = 7 - cls.weekday(year, month, 1)
         weeks = list()
         weeks.append((1, first_sunday))
         _days_in_month = cls.days_in_month(year, month)
@@ -518,19 +571,39 @@ class Ntp:
         return weeks
 
     @classmethod
-    def day_from_week_and_weekday(cls, year, month, week, wd):
+    def day_from_week_and_weekday(cls, year, month, week, weekday):
+        """
+
+        :param year:
+        :param month:
+        :param week:
+        :param weekday:
+        :return:
+        """
+
+        if not isinstance(year, int) or not 1 <= year:
+            raise ValueError('Invalid parameter: year={} must be int and greater than 0'.format(year))
+
+        if not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError('Invalid parameter: month={} must be int and between 1 and 12'.format(month))
+
+        if not isinstance(week, int) or not 1 <= week <= 6:
+            raise ValueError('Invalid parameter: week={} must be int in range 1-6'.format(week))
+
+        if not isinstance(weekday, int) or not 0 <= weekday <= 6:
+            raise ValueError('Invalid parameter: weekday={} must be int in range 0-6'.format(weekday))
+
         weeks = cls.weeks_in_month(year, month)
-        month_days = cls.days_in_month(year, month)
+        days = cls.days_in_month(year, month)
+        day = weeks[week - 1][0] + weekday
 
-        day = weeks[week - 1][0] + wd
-
-        if day <= month_days:
+        if day <= days:
             return day
 
         # Return the day from last week of the month that contains the weekday
         for i in range(1, 3):
-            day = weeks[-i][0] + wd
-            if day <= month_days:
+            day = weeks[-i][0] + weekday
+            if day <= days:
                 return day
 
         raise Exception('Non existent day')
@@ -542,6 +615,9 @@ class Ntp:
 
     @staticmethod
     def _validate_hostname(hostname: str):
+        if not isinstance(hostname, str):
+            raise ValueError('Invalid parameter: hostname={} must be string'.format(hostname))
+
         # strip exactly one dot from the right, if present
         if hostname[-1] == ".":
             hostname = hostname[:-1]
@@ -559,12 +635,13 @@ class Ntp:
 
     @classmethod
     def _select_epoch(cls, epoch, epoch_list):
-        if not isinstance(epoch_list, tuple):
-            raise ValueError('Invalid parameter: epoch_list must be a tuple')
-
-        if isinstance(epoch, int) and epoch in (0, 1, 2):
-            return epoch_list[epoch]
-        elif epoch is None:
+        if epoch is None or epoch_list is None:
             return 0
-        else:
-            raise ValueError('Invalid parameter: epoch')
+
+        if not isinstance(epoch, int) or not 0 <= epoch <= 2:
+            raise ValueError('Invalid parameter: epoch={}'.format(epoch))
+
+        if not isinstance(epoch_list, tuple) or len(epoch_list) != 3:
+            raise ValueError('Invalid parameter: epoch_list={} must be a tuple and its length must be 3'.format(epoch_list))
+
+        return epoch_list[epoch]
