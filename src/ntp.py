@@ -102,7 +102,7 @@ class Ntp:
         if callback is not None and not callable(callback):
             raise ValueError('Invalid parameter: callback={} must be a callable object or None to disable logging'.format(callback))
 
-        cls._logger = callback
+        cls._log_callback = callback
 
     @classmethod
     def set_dst(cls, start: tuple, end: tuple, bias: int):
@@ -180,15 +180,16 @@ class Ntp:
     @classmethod
     def set_dst_time_bias(cls, bias: int):
         """
-        Set Daylight Saving Time bias expressed in seconds
+        Set Daylight Saving Time bias expressed in minutes
 
-        :param bias: seconds of the DST bias
+        :param bias: minutes of the DST bias. Correct values are 30, 60, 90 and 120
         """
 
         if not isinstance(bias, int) or bias not in (30, 60, 90, 120):
             raise ValueError("Invalid parameter: bias={} represents minutes offset and must be either 30, 60, 90 or 120".format(bias))
 
-        cls._dst_bias = bias
+        # Convert the time bias to seconds
+        cls._dst_bias = bias * 60
 
     @classmethod
     def get_dst_time_bias(cls):
@@ -197,12 +198,13 @@ class Ntp:
         :return:
         """
 
-        return cls._dst_bias
+        # Convert the time bias to minutes
+        return cls._dst_bias // 60
 
     @classmethod
     def dst(cls):
         """
-        Calculate if DST is currently in effect and return the bias.
+        Calculate if DST is currently in effect and return the bias in seconds.
 
         :return: Calculated DST bias
         """
@@ -218,14 +220,12 @@ class Ntp:
 
         if cls._dst_start[0] < month < cls._dst_end[0]:
             return cls._dst_bias
-        elif month < cls._dst_start[0] or cls._dst_end[0] < month:
-            return 0
         elif cls._dst_start[0] == month:
             # Switch time in hours since the beginning of the month
             switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
             if (day * 24 + date[4]) >= switch_hour:
                 return cls._dst_bias
-        else:
+        elif cls._dst_end[0] == month:
             # Switch time in hours since the beginning of the month
             switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
             if (day * 24 + date[4]) < switch_hour:
@@ -658,7 +658,7 @@ class Ntp:
     @classmethod
     def _log(cls, message: str):
         if callable(cls._log_callback):
-            cls._logger(message)
+            cls._log_callback(message)
 
     @classmethod
     def _datetime(cls, dt = None):
