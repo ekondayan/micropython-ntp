@@ -18,8 +18,6 @@ try:
 except ImportError:
     import re
 
-import machine
-
 
 class Ntp:
     EPOCH_1900 = 0
@@ -58,8 +56,8 @@ class Ntp:
     _NTP_DELTA_1900_2000 = 3155673600  # Seconds between 1900 and 2000
     _NTP_DELTA_1970_2000 = 946684800   # Seconds between 1970 and 2000 = _NTP_DELTA_1900_2000 - _NTP_DELTA_1900_1970
 
-    _logger = print
-    _rtc = machine.RTC()
+    _log_callback = print
+    _datetime_callback = None
     _hosts: list = []
     _timezone: int = 0
     _rtc_last_sync: int = 0
@@ -73,6 +71,38 @@ class Ntp:
     # (month, week, day of week, hour)
     _dst_end: tuple = ()
     _dst_bias: int = 0
+
+    @classmethod
+    def set_datetime_callback(cls, callback):
+        """
+        Set a callback function for reading and writing a RTC chip. Separation of the low level functions for accessing
+        the RTC allows the library te be chip-agnostic. With this strategy you can manipulate the internal, any
+        external or even multiple RTC chips if you wish.
+
+        :param callback: A callable object. With no arguments, this callable returns an 8-tuple with the
+        current date and time. With 1 argument (being an 8-tuple) it sets the date and time of the RTC. The format
+        of the 8-tuple is (year, month, day, weekday, hours, minutes, seconds, subseconds)
+        """
+
+        if not callable(callback):
+            ValueError('Invalid parameter: callback={} must be a callable object'.format(callback))
+
+        cls._datetime_callback = callback
+
+    @classmethod
+    def set_logger_callback(cls, callback = print):
+        """
+        Set a callback function for the logger, it's parameter is a callback function - func(message: str)
+        The default logger is print() and to set it just call the setter without any parameters.
+        To disable logging, set the callback to "None"
+
+        :param callback: A callable object. Default value = print; None = disabled logger; Any other value raises exception
+        """
+
+        if callback is not None and not callable(callback):
+            raise ValueError('Invalid parameter: callback={} must be a callable object or None to disable logging'.format(callback))
+
+        cls._logger = callback
 
     @classmethod
     def set_dst(cls, start: tuple, end: tuple, bias: int):
@@ -115,7 +145,7 @@ class Ntp:
         :return:
         """
 
-        return tuple(cls._dst_start)
+        return cls._dst_start
 
     @classmethod
     def set_dst_end(cls, month: int, week: int, weekday: int, hour: int):
@@ -145,13 +175,14 @@ class Ntp:
         :return:
         """
 
-        return tuple(cls._dst_end)
+        return cls._dst_end
 
     @classmethod
     def set_dst_time_bias(cls, bias: int):
         """
+        Set Daylight Saving Time bias expressed in seconds
 
-        :param bias:
+        :param bias: seconds of the DST bias
         """
 
         if not isinstance(bias, int) or bias not in (30, 60, 90, 120):
@@ -171,7 +202,8 @@ class Ntp:
     @classmethod
     def dst(cls):
         """
-        Calculate if DST is currently present and return the bias.
+        Calculate if DST is currently in effect and return the bias.
+
         :return: Calculated DST bias
         """
 
@@ -179,7 +211,7 @@ class Ntp:
         if not cls._dst_start or not cls._dst_end:
             return 0
 
-        date = time.localtime()
+        date = cls._datetime()
         year = date[0]
         month = date[1]
         day = date[2]
@@ -191,33 +223,22 @@ class Ntp:
         elif cls._dst_start[0] == month:
             # Switch time in hours since the beginning of the month
             switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
-            if (day * 24 + date[3]) >= switch_hour:
+            if (day * 24 + date[4]) >= switch_hour:
                 return cls._dst_bias
         else:
             # Switch time in hours since the beginning of the month
             switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
-            if (day * 24 + date[3]) < switch_hour:
+            if (day * 24 + date[4]) < switch_hour:
                 return cls._dst_bias
 
         return 0
 
     @classmethod
-    def set_logger(cls, callback = None):
-        """
-
-        :param callback:
-        """
-
-        if callback is None or callable(callback):
-            cls._logger = callback
-        else:
-            raise ValueError('Invalid parameter: callback={} must be a callable object or None to set it to print()'.format(callback))
-
-    @classmethod
     def set_ntp_timeout(cls, timeout_s: int = 1):
         """
+        Set a timeout of the requests to the NTP servers. Default is 1 sec
 
-        :param timeout_s:
+        :param timeout_s: Timeout in seconds of the request
         """
 
         if not isinstance(timeout_s, int):
@@ -228,8 +249,9 @@ class Ntp:
     @classmethod
     def ntp_timeout(cls):
         """
+        Get the timeout of the requests to the NTP servers
 
-        :return:
+        :return: Timeout in seconds
         """
 
         return cls._ntp_timeout_s
@@ -237,8 +259,9 @@ class Ntp:
     @classmethod
     def hosts(cls):
         """
+        Get the list of NTP servers as a tuple
 
-        :return:
+        :return: Tuple with the NTP servers
         """
 
         return tuple(cls._hosts)
@@ -246,8 +269,9 @@ class Ntp:
     @classmethod
     def set_hosts(cls, value: list):
         """
+        Set a list with NTP servers
 
-        :param value:
+        :param value: A tuple containing NTP servers. Can contain hostnames or IP addresses
         """
 
         cls._hosts.clear()
@@ -259,8 +283,9 @@ class Ntp:
     @classmethod
     def timezone(cls):
         """
+        Get the timezone as a tuple
 
-        :return:
+        :return: A tuple with the timezone in the form (hour, minute)
         """
 
         return cls._timezone // 3600, (cls._timezone % 3600) // 60
@@ -268,9 +293,11 @@ class Ntp:
     @classmethod
     def set_timezone(cls, hour: int, minute: int = 0):
         """
+        Set the timezone. The typical time shift is multiple of whole hours, but a time shift with minutes is also
+        possible. A validity chek is made for the correctness of the timezone.
 
-        :param hour:
-        :param minute:
+        :param hour: hours offset of the timezone. Type is 'int'
+        :param minute: minutes offset of the timezone. Type is 'int'
         """
 
         if (
@@ -283,11 +310,19 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
+    def time(cls):
+        us = cls.time_us()
+        lt = time.localtime(us // 1000000)
+        return lt[0], lt[1], lt[2], lt[6], lt[7], lt[3], lt[4], lt[5], us % 1000000
+
+    @classmethod
     def time_s(cls, epoch = None):
         """
+        Return the current time in seconds according to the selected 'epoch'
 
-        :param epoch:
-        :return:
+        :param epoch: an epoch according to which the time will be be calculated.
+        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :return: the time in seconds since the selected epoch
         """
 
         return cls.time_us(epoch) // 1000000
@@ -295,9 +330,11 @@ class Ntp:
     @classmethod
     def time_ms(cls, epoch = None):
         """
+        Return the current time in milliseconds according to the selected epoch
 
-        :param epoch:
-        :return:
+        :param epoch: an epoch according to which the time will be be calculated.
+        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :return: the time in milliseconds since the selected epoch
         """
 
         return cls.time_us(epoch) // 1000
@@ -305,27 +342,36 @@ class Ntp:
     @classmethod
     def time_us(cls, epoch = None):
         """
+        Return the current time in microseconds according to the selected epoch
 
-        :param epoch:
-        :return:
+        :param epoch: an epoch according to which the time will be be calculated.
+        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :return: the time in microseconds since the selected epoch
         """
 
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
 
         # Do not take the value when on the verge of the next second
         # This is required to ensure that the sec and usec will be read within the boundaries of one second
-        us = cls._rtc.datetime()[7]
+        us = cls._datetime()[7]
         if us >= 995000:
             time.sleep_us(100000 - us)
 
-        return (time.time() + epoch + cls._timezone + cls.dst()) * 1000000 + cls._rtc.datetime()[7]
+        return (time.time() + epoch + cls._timezone + cls.dst()) * 1000000 + cls._datetime()[7]
 
     @classmethod
     def network_time(cls, epoch = None):
         """
+        Get the accurate time from the first valid NTP server in the list with microsecond precision. When the server
+        does not respond within the timeout period, the next server in the list is used. The default timeout is 1 sec.
+        When none of the servers respond, throw an Exception.
 
-        :param epoch:
-        :return:
+        :param epoch: an epoch according to which the time will be be calculated.
+        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :return: a tuple with the NTP time and a timestamp. First position contains the accurate time from the NTP
+        server in nanoseconds. The second position in the tuple is a timestamp in microseconds taken at the time the
+        request to the server was sent. This timestamp can be used later to compensate for the difference in time from
+        when the request was sent and the current timestamp, taken with time.ticks_us()
         """
 
         if not any(cls._hosts):
@@ -373,7 +419,7 @@ class Ntp:
         # Negate the execution time of all the instructions up to this point
         ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1])
         lt = time.localtime(ntp_us // 1000000)
-        cls._rtc.datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000000))
+        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000000))
         cls._rtc_last_sync = ntp_us
 
     @classmethod
@@ -396,7 +442,7 @@ class Ntp:
 
         ntp_reading = cls.network_time(cls.EPOCH_2000)
 
-        rtc_us = cls.time_us(Ntp.EPOCH_2000)
+        rtc_us = cls.time_us(cls.EPOCH_2000)
         # Negate the execution time of all the instructions up to this point
         ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1])
 
@@ -458,6 +504,7 @@ class Ntp:
         :param ppm_drift:
         :return:
         """
+
         if cls._rtc_last_sync == 0 and cls._drift_last_compensate == 0:
             return 0
 
@@ -482,20 +529,20 @@ class Ntp:
         if not isinstance(compensate_us, int):
             raise ValueError('Invalid parameter: compensate_us={} must be int'.format(compensate_us))
 
-        rtc_us = cls.time_us(Ntp.EPOCH_2000)
+        rtc_us = cls.time_us(cls.EPOCH_2000)
         rtc_us += compensate_us
         lt = time.localtime(rtc_us // 1000000)
-        cls._rtc.datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000000))
+        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000000))
         cls._drift_last_compensate = rtc_us
 
     @classmethod
     def weekday(cls, year, month, day):
         """
-        Find Weekday using Zeller's Algorithm
+        Find Weekday using Zeller's Algorithm, from the year, month and day
+
         :param year:
         :param month:
         :param day:
-
         :return:
         """
 
@@ -610,13 +657,25 @@ class Ntp:
 
     @classmethod
     def _log(cls, message: str):
-        if callable(cls._logger):
+        if callable(cls._log_callback):
             cls._logger(message)
+
+    @classmethod
+    def _datetime(cls, dt = None):
+        if not callable(cls._datetime_callback):
+            Exception('No callback set to access the RTC')
+
+        if isinstance(dt, tuple) and len(dt) == 8:
+            cls._datetime_callback(dt)
+        elif dt is None:
+            return cls._datetime_callback()
+        else:
+            raise ValueError('Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hours, minutes, seconds, subseconds)'.format(hostname))
 
     @staticmethod
     def _validate_hostname(hostname: str):
         if not isinstance(hostname, str):
-            raise ValueError('Invalid parameter: hostname={} must be string'.format(hostname))
+            raise ValueError('Invalid parameter: hostname={} must be a string'.format(hostname))
 
         # strip exactly one dot from the right, if present
         if hostname[-1] == ".":

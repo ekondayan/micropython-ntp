@@ -14,17 +14,19 @@ A robust MicroPython **Time library** for manipulating the **RTC** and and synci
 
 3. Microsecond precision
 
-4. Calculate and compensate RTC drift
+4. RTC chip-agnostic
 
-5. Timezones
+5. Calculate and compensate RTC drift
 
-6. Epochs
+6. Timezones
 
-7. Day Light Saving Time
+7. Epochs
 
-8. Get time in sec, ms and us
+8. Day Light Saving Time
 
-9. Custom Logger with callback function
+9. Get time in sec, ms and us
+
+10. Custom Logger with callback function
 
 <u>Unfinished:</u>
 
@@ -36,12 +38,34 @@ A robust MicroPython **Time library** for manipulating the **RTC** and and synci
 
 ***!!!At this point all the implemented features are robustly tested and they seem stable enough for production, BUT I do not recommended to use it in a production environment until the API stabilization phase is finished and some unit tests are developed.!!!***
 
+**Initialize the library**
+
+The first thing to do when using the library is to set a callback function for accessing the RTC chip. The idea behind this strategy is that the library can manipulate multiple RTC chips(internal, external or combination of both). 
+
+The callback is a function in the form `func(datetime: tuple)`.
+
+With no arguments, this method returns an 8-tuple with the current date and time. With 1 argument (being an 8-tuple) it sets the date and time.
+
+The `datetime` tuple has the following format: `tuple(year, month, day, weekday, hours, minutes, seconds, subseconds)`
+
+`weekday` is 1-7 for Monday through Sunday.
+
+Micropython example:
+
+```python
+from machine import RTC
+from ntp import Ntp
+
+_rtc = RTC()
+Ntp.set_datetime_callback(_rtc.datetime)
+```
+
 **RTC sync**
 
 For syncing the RTC you have to set a list of hosts first and then run
 
 ```python
-def rtc_sync(cls)
+Ntp.rtc_sync()
 ```
 
 This function will try to read the time from the hosts list. The first available host will be used to set the time of the RTC in **UTC**. 
@@ -49,7 +73,7 @@ This function will try to read the time from the hosts list. The first available
 A timeout in seconds can be set when accessing the hosts
 
 ```python
-def set_ntp_timeout(cls, timeout_s: int = 1)
+Ntp.set_ntp_timeout(timeout_s: int = 1)
 ```
 
 **Reading the time**
@@ -57,9 +81,9 @@ def set_ntp_timeout(cls, timeout_s: int = 1)
 To read the time, a set of functions are available
 
 ```python
-def time_s(cls, epoch: int = None)
-def time_ms(cls, epoch: int = None)
-def time_us(cls, epoch: int = None)
+Ntp.time_s(epoch: int = None)
+Ntp.time_ms(epoch: int = None)
+Ntp.time_us(epoch: int = None)
 ```
 
 The suffix of each function shows how the time will be represented.
@@ -89,7 +113,7 @@ as value to the `epoch` parameter and the returned time will be calculated accor
 Compare the local RTC with the network time and calculate how much the local RTC is drifting. Calculating the drift is easily done by calling
 
 ```python
-def drift_calculate(cls)
+Ntp.drift_calculate()
 ```
 
 Connects to the NTP server and returns the calculated ppm and the time in micro seconds, either positive or negative. Positive values represent a RTC that is speeding, negative values represent RTC that is lagging, when the value is zero, the RTC can be considered accurate. For this function to work, you have to sync the RTC first. My personal recommendation is to wait for at least 15 minutes after syncing the RTC and then to calculate the drifting. Longer time periods will give you more accurate value.
@@ -97,7 +121,7 @@ Connects to the NTP server and returns the calculated ppm and the time in micro 
 To calculate the drift at a latter stage, you can run
 
 ```python
-def drift_us(cls, ppm_drift: float = None)
+Ntp.drift_us(ppm_drift: float = None)
 ```
 
 This function does not read the time from the NTP server(no internet connection is required), instead it uses the previously calculated ppm.
@@ -105,7 +129,7 @@ This function does not read the time from the NTP server(no internet connection 
 If you know in advance how much is the local RTC drifting, you can set it manually by calling
 
 ```python
-def set_drift_ppm(cls, ppm: float)
+Ntp.set_drift_ppm(ppm: float)
 ```
 
 The `ppm` parameter can be positive or negative. Positive values represent a RTC that is speeding, negative values represent RTC that is lagging.
@@ -113,13 +137,13 @@ The `ppm` parameter can be positive or negative. Positive values represent a RTC
 Here is a list of all the functions that are managing the drift
 
 ```python
-def drift_calculate(cls)
-def drift_last_compensate(cls, epoch: int = None):
-def drift_last_calculate(cls, epoch: int = None)
-def drift_ppm(cls)
-def set_drift_ppm(cls, ppm: float)
-def drift_us(cls, ppm_drift: float = None)
-def drift_compensate(cls, compensate_us: int)
+Ntp.drift_calculate(cls)
+Ntp.drift_last_compensate(epoch: int = None):
+Ntp.drift_last_calculate(epoch: int = None)
+Ntp.drift_ppm(cls)
+Ntp.set_drift_ppm(ppm: float)
+Ntp.drift_us(ppm_drift: float = None)
+Ntp.drift_compensate(compensate_us: int)
 ```
 
 **Timezones**
@@ -127,7 +151,7 @@ def drift_compensate(cls, compensate_us: int)
 The library has support for timezones. Setting the timezone ensures basic correctness checks and sets the timezone. Just call
 
 ```python
-def set_timezone(cls, hour: int, minute: int = 0)
+Ntp.set_timezone(hour: int, minute: int = 0)
 ```
 
 **!!! NOTE: When syncing or compensating the RTC, the time will be set in UTC !!!**
@@ -135,22 +159,26 @@ def set_timezone(cls, hour: int, minute: int = 0)
 When you get the time with
 
 ```python
-def time_s(cls, epoch: int = None)
-def time_ms(cls, epoch: int = None)
-def time_us(cls, epoch: int = None)
+Ntp.time_s(epoch: int = None)
+Ntp.time_ms(epoch: int = None)
+Ntp.time_us(epoch: int = None)
 ```
 
 the timezone will be calculated automatically.
+
+**Daylight Saving Time**
+
+TODO
 
 **Logger**
 
 The library support setting a custom logger. If you want to redirect the error messages to another destination, set your logger
 
 ```python
-def set_logger(cls, callback = None)
+Ntp.set_logger(callback = print)
 ```
 
-The default logger is set to the function `print()`. To disable error logging, just set the callback to `None`.
+The default logger is `print()` and to set it just call the method without any parameters.  To disable logging, set the callback to "None"
 
 # <u>Dependencies</u>
 
