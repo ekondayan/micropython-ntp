@@ -206,7 +206,7 @@ class Ntp:
         """
         Calculate if DST is currently in effect and return the bias in seconds.
 
-        :return: Calculated DST bias
+        :return: Calculated DST bias in seconds
         """
 
         # When DST is disabled, return 0
@@ -305,15 +305,15 @@ class Ntp:
                 (minute == 30 and hour not in (-9, -3, 3, 4, 5, 6, 9, 10)) or
                 (minute == 45 and hour not in (5, 8, 12))
         ):
-            raise Exception('Timezone is invalid')
+            raise Exception('Invalid timezone for hour={} and minute={}'.format(hour, minute))
 
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
     def time(cls):
         us = cls.time_us()
-        lt = time.localtime(us // 1000000)
-        return lt[0], lt[1], lt[2], lt[6], lt[7], lt[3], lt[4], lt[5], us % 1000000
+        lt = time.localtime(us // 1000_000)
+        return lt[0], lt[1], lt[2], lt[6], lt[7], lt[3], lt[4], lt[5], us % 1000_000
 
     @classmethod
     def time_s(cls, epoch = None):
@@ -325,7 +325,7 @@ class Ntp:
         :return: the time in seconds since the selected epoch
         """
 
-        return cls.time_us(epoch) // 1000000
+        return cls.time_us(epoch) // 1000_000
 
     @classmethod
     def time_ms(cls, epoch = None):
@@ -355,9 +355,9 @@ class Ntp:
         # This is required to ensure that the sec and usec will be read within the boundaries of one second
         us = cls._datetime()[7]
         if us >= 995000:
-            time.sleep_us(100000 - us)
+            time.sleep_us(100_000 - us)
 
-        return (time.time() + epoch + cls._timezone + cls.dst()) * 1000000 + cls._datetime()[7]
+        return (time.time() + epoch + cls._timezone + cls.dst()) * 1000_000 + cls._datetime()[7]
 
     @classmethod
     def network_time(cls, epoch = None):
@@ -403,8 +403,8 @@ class Ntp:
                 continue
 
             sec -= epoch
-            micro = (nano * 1000000) >> 32
-            return sec * 1000000 + micro, timestamp
+            micro = (nano * 1000_000) >> 32
+            return sec * 1000_000 + micro, timestamp
 
         raise Exception('''Can't connect to any of the NTP servers''')
 
@@ -418,8 +418,8 @@ class Ntp:
 
         # Negate the execution time of all the instructions up to this point
         ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1])
-        lt = time.localtime(ntp_us // 1000000)
-        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000000))
+        lt = time.localtime(ntp_us // 1000_000)
+        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000_000))
         cls._rtc_last_sync = ntp_us
 
     @classmethod
@@ -431,7 +431,7 @@ class Ntp:
         """
 
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
-        return cls._rtc_last_sync + epoch * 1000000
+        return 0 if cls._rtc_last_sync == 0 else cls._rtc_last_sync + epoch * 1000_000
 
     @classmethod
     def drift_calculate(cls):
@@ -449,7 +449,7 @@ class Ntp:
         rtc_sync_delta = ntp_us - max(cls._rtc_last_sync, cls._drift_last_compensate)
         rtc_ntp_delta = rtc_us - ntp_us
 
-        cls._ppm_drift = (rtc_ntp_delta / rtc_sync_delta) * 1000000
+        cls._ppm_drift = (rtc_ntp_delta / rtc_sync_delta) * 1000_000
 
         cls._drift_last_calculate = ntp_us
 
@@ -464,7 +464,7 @@ class Ntp:
         """
 
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
-        return cls._drift_last_compensate + epoch * 1000000
+        return 0 if cls._drift_last_compensate == 0 else cls._drift_last_compensate + epoch * 1000_000
 
     @classmethod
     def drift_last_calculate(cls, epoch: int = None):
@@ -475,7 +475,7 @@ class Ntp:
         """
 
         epoch = cls._select_epoch(epoch, (cls._NTP_DELTA_1900_2000, cls._NTP_DELTA_1970_2000, 0))
-        return cls._drift_last_calculate + epoch * 1000000
+        return 0 if cls._drift_last_calculate == 0 else cls._drift_last_calculate + epoch * 1000_000
 
     @classmethod
     def drift_ppm(cls):
@@ -515,7 +515,7 @@ class Ntp:
             raise ValueError('Invalid parameter: ppm_drift={} must be float or int'.format(ppm_drift))
 
         delta_time_rtc = cls.time_us(cls.EPOCH_2000) - max(cls._rtc_last_sync, cls._drift_last_compensate)
-        delta_time_real = (1000000 * delta_time_rtc) // (1000000 + ppm_drift)
+        delta_time_real = (1000_000 * delta_time_rtc) // (1000_000 + ppm_drift)
 
         return delta_time_rtc - delta_time_real
 
@@ -531,8 +531,8 @@ class Ntp:
 
         rtc_us = cls.time_us(cls.EPOCH_2000)
         rtc_us += compensate_us
-        lt = time.localtime(rtc_us // 1000000)
-        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000000))
+        lt = time.localtime(rtc_us // 1000_000)
+        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000_000))
         cls._drift_last_compensate = rtc_us
 
     @classmethod
@@ -663,7 +663,7 @@ class Ntp:
     @classmethod
     def _datetime(cls, dt = None):
         if not callable(cls._datetime_callback):
-            Exception('No callback set to access the RTC')
+            raise Exception('No callback set to access the RTC')
 
         if isinstance(dt, tuple) and len(dt) == 8:
             cls._datetime_callback(dt)
