@@ -119,6 +119,10 @@ class Ntp:
         :param end:4-tuple(month, week, weekday, hour) end of DST
         :param bias: integer Daylight Saving Time bias expressed in minutes
         """
+        if not isinstance(start, tuple) or not len(start) == 4:
+            raise ValueError("Invalid parameter: start={} must be a 4-tuple(month, week, weekday, hour)".format(start))
+        elif not isinstance(end, tuple) or not len(end) == 4:
+            raise ValueError("Invalid parameter: end={} must be a 4-tuple(month, week, weekday, hour)".format(end))
 
         cls.set_dst_start(start[0], start[1], start[2], start[3])
         cls.set_dst_end(end[0], end[1], end[2], end[3])
@@ -313,45 +317,49 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
-    def time(cls):
+    def time(cls, gmt: bool = False):
+        """ Get a tuple with the date and time in GMT or local timezone + DST
+
+        :param gmt: boolean according to GMT time
+        :return: 9-tuple(year, month, day, weekday, yearday, hour, minute, second, us)
         """
 
-        :return:
-        """
-
-        us = cls.time_us()
-        lt = time.localtime(us // 1000_000)
-        return lt[0], lt[1], lt[2], lt[6], lt[7], lt[3], lt[4], lt[5], us % 1000_000
+        us = cls.time_us(gmt = gmt)
+        year, month, day, hour, minute, second, weekday, yearday = time.localtime(us // 1000_000)
+        return year, month, day, weekday, yearday, hour, minute, second, us % 1000_000
 
     @classmethod
-    def time_s(cls, epoch = None):
+    def time_s(cls, epoch = None, gmt: bool = False):
         """ Return the current time in seconds according to the selected epoch
 
         :param epoch: an epoch according to which the time will be be calculated.
         Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :param gmt: boolean according to GMT time
         :return: the time in seconds since the selected epoch
         """
 
-        return cls.time_us(epoch) // 1000_000
+        return cls.time_us(epoch = epoch, gmt = gmt) // 1000_000
 
     @classmethod
-    def time_ms(cls, epoch = None):
+    def time_ms(cls, epoch = None, gmt: bool = False):
         """ Return the current time in milliseconds according to the selected epoch
 
         :param epoch: an epoch according to which the time will be be calculated.
         Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :param gmt: boolean according to GMT time
         :return: the time in milliseconds since the selected epoch
         """
 
-        return cls.time_us(epoch) // 1000
+        return cls.time_us(epoch = epoch, gmt = gmt) // 1000
 
     @classmethod
-    def time_us(cls, epoch = None):
+    def time_us(cls, epoch = None, gmt: bool = False):
         """ Return the current time in microseconds according to the selected epoch
 
         :param epoch: an epoch according to which the time will be be calculated.
         Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :return: the time in microseconds since the selected epoch
+        :param gmt: boolean according to GMT time
+        :return: integer the time in microseconds since the selected epoch
         """
 
         epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
@@ -362,7 +370,8 @@ class Ntp:
         if us >= 995000:
             time.sleep_us(100_000 - us)
 
-        return (time.time() + epoch + cls._timezone + cls.dst()) * 1000_000 + cls._datetime()[7]
+        timezone_and_dst = 0 if gmt else (cls._timezone + cls.dst())
+        return (time.time() + epoch + timezone_and_dst) * 1000_000 + cls._datetime()[7]
 
     @classmethod
     def network_time(cls, epoch = None):
@@ -372,7 +381,7 @@ class Ntp:
 
         :param epoch: an epoch according to which the time will be be calculated.
         Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :return: 2-tuple(ntp time, timestamp). First position contains the accurate time from the NTP
+        :return: 2-tuple(ntp time, timestamp). First position contains the accurate time(GMT) from the NTP
         server in nanoseconds. The second position in the tuple is a timestamp in microseconds taken at the time the
         request to the server was sent. This timestamp can be used later to compensate for the difference in time from
         when the request was sent and the current timestamp, taken with time.ticks_us()
@@ -417,29 +426,31 @@ class Ntp:
 
     @classmethod
     def rtc_sync(cls):
-        """
+        """ Synchronize the RTC with the time(GMT) from the NTP server. Timezone and DST are not added.
 
-        :return:
         """
 
         ntp_reading = cls.network_time(cls.EPOCH_2000)
 
         # Negate the execution time of all the instructions up to this point
         ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1])
-        lt = time.localtime(ntp_us // 1000_000)
-        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000_000))
+        year, month, day, hour, minute, second, weekday, *_ = time.localtime(ntp_us // 1000_000)
+        cls._datetime((year, month, day, weekday + 1, hour, minute, second, ntp_us % 1000_000))
         cls._rtc_last_sync = ntp_us
 
     @classmethod
-    def rtc_last_sync(cls, epoch: int = None):
+    def rtc_last_sync(cls, epoch: int = None, gmt: bool = False):
+        """ Get the last time the RTC was synchronized.
+
+        :param epoch: an epoch according to which the time will be be calculated.
+        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :param gmt: boolean according to GMT time
+        :return: RTC last sync time in micro seconds by taking into account epoch and gmt
         """
 
-        :param epoch:
-        :return:
-        """
-
+        timezone_and_dst = 0 if gmt else (cls._timezone + cls.dst())
         epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
-        return 0 if cls._rtc_last_sync == 0 else cls._rtc_last_sync + epoch * 1000_000
+        return 0 if cls._rtc_last_sync == 0 else cls._rtc_last_sync + (epoch + timezone_and_dst) * 1000_000
 
     @classmethod
     def drift_calculate(cls):
@@ -449,7 +460,7 @@ class Ntp:
         """
 
         ntp_reading = cls.network_time(cls.EPOCH_2000)
-        rtc_us = cls.time_us(cls.EPOCH_2000)
+        rtc_us = cls.time_us(epoch = cls.EPOCH_2000, gmt = True)
         # For maximum precision, negate the execution time of all the instructions up to this point
         ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1])
         # Calculate the delta between thu current time and the last rtc sync or last compensate(whatever occurred last)
@@ -461,26 +472,32 @@ class Ntp:
         return cls._ppm_drift, rtc_ntp_delta
 
     @classmethod
-    def drift_last_compensate(cls, epoch: int = None):
+    def drift_last_compensate(cls, epoch: int = None, gmt: bool = False):
+        """ Get the last time the RTC was compensated based on the drift calculation.
+
+        :param epoch: an epoch according to which the time will be be calculated.
+        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :param gmt: boolean according to GMT time
+        :return: RTC last compensate time in micro seconds by taking into account epoch and gmt
         """
 
-        :param epoch:
-        :return:
-        """
-
+        timezone_and_dst = 0 if gmt else (cls._timezone + cls.dst())
         epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
-        return 0 if cls._drift_last_compensate == 0 else cls._drift_last_compensate + epoch * 1000_000
+        return 0 if cls._drift_last_compensate == 0 else cls._drift_last_compensate + (epoch + timezone_and_dst) * 1000_000
 
     @classmethod
-    def drift_last_calculate(cls, epoch: int = None):
+    def drift_last_calculate(cls, epoch: int = None, gmt: bool = False):
+        """ Get the last time the drift was calculated
+
+        :param epoch: an epoch according to which the time will be be calculated.
+        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+        :param gmt: boolean according to GMT time
+        :return: the last drift calculation time in micro seconds by taking into account epoch and gmt
         """
 
-        :param epoch:
-        :return:
-        """
-
+        timezone_and_dst = 0 if gmt else (cls._timezone + cls.dst())
         epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
-        return 0 if cls._drift_last_calculate == 0 else cls._drift_last_calculate + epoch * 1000_000
+        return 0 if cls._drift_last_calculate == 0 else cls._drift_last_calculate + (epoch + timezone_and_dst) * 1000_000
 
     @classmethod
     def drift_ppm(cls):
@@ -519,7 +536,7 @@ class Ntp:
         if not isinstance(ppm_drift, (float, int)):
             raise ValueError('Invalid parameter: ppm_drift={} must be float or int'.format(ppm_drift))
 
-        delta_time_rtc = cls.time_us(cls.EPOCH_2000) - max(cls._rtc_last_sync, cls._drift_last_compensate)
+        delta_time_rtc = cls.time_us(epoch = cls.EPOCH_2000, gmt = True) - max(cls._rtc_last_sync, cls._drift_last_compensate)
         delta_time_real = (1000_000 * delta_time_rtc) // (1000_000 + ppm_drift)
 
         return delta_time_rtc - delta_time_real
@@ -534,9 +551,9 @@ class Ntp:
         if not isinstance(compensate_us, int):
             raise ValueError('Invalid parameter: compensate_us={} must be int'.format(compensate_us))
 
-        rtc_us = cls.time_us(cls.EPOCH_2000) + compensate_us
-        lt = time.localtime(rtc_us // 1000_000)
-        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000_000))
+        rtc_us = cls.time_us(epoch = cls.EPOCH_2000, gmt = True) + compensate_us
+        year, month, day, hour, minute, second, weekday, *_ = time.localtime(rtc_us // 1000_000)
+        cls._datetime((year, month, day, weekday + 1, hour, minute, second, rtc_us % 1000_000))
         cls._drift_last_compensate = rtc_us
 
     @classmethod
