@@ -222,19 +222,21 @@ class Ntp:
         if not cls._dst_start or not cls._dst_end:
             return 0
 
-        year, month, day, _, hours, *_ = cls._datetime()
+        dt = cls._datetime()
+        # dt = (year, month, day, weekday, hours, minutes, seconds, subseconds)
+        # index  0      1     2      3       4       5       6          7
 
-        if cls._dst_start[0] < month < cls._dst_end[0]:
+        if cls._dst_start[0] < dt[1] < cls._dst_end[0]:
             return cls._dst_bias
-        elif cls._dst_start[0] == month:
+        elif cls._dst_start[0] == dt[1]:
             # Switch time in hours since the beginning of the month
-            switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
-            if (day * 24 + hours) >= switch_hour:
+            switch_hour = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            if (dt[2] * 24 + dt[4]) >= switch_hour:
                 return cls._dst_bias
-        elif cls._dst_end[0] == month:
+        elif cls._dst_end[0] == dt[1]:
             # Switch time in hours since the beginning of the month
-            switch_hour = cls.day_from_week_and_weekday(year, month, cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
-            if (day * 24 + hours) < switch_hour:
+            switch_hour = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+            if (dt[2] * 24 + dt[4]) < switch_hour:
                 return cls._dst_bias
 
         return 0
@@ -325,8 +327,11 @@ class Ntp:
         """
 
         us = cls.time_us(gmt = gmt)
-        year, month, day, hour, minute, second, weekday, yearday = time.localtime(us // 1000_000)
-        return year, month, day, weekday, yearday, hour, minute, second, us % 1000_000
+        lt = time.localtime(us // 1000_000)
+        # lt = (year, month, day, hour, minute, second, weekday, yearday)
+        # index  0      1     2    3      4       5       6         7
+
+        return lt[0], lt[1], lt[2], lt[6], lt[7], lt[3], lt[4], lt[5], us % 1000_000
 
     @classmethod
     def time_s(cls, epoch = None, gmt: bool = False):
@@ -434,8 +439,11 @@ class Ntp:
 
         # Negate the execution time of all the instructions up to this point
         ntp_us = ntp_reading[0] + (time.ticks_us() - ntp_reading[1])
-        year, month, day, hour, minute, second, weekday, *_ = time.localtime(ntp_us // 1000_000)
-        cls._datetime((year, month, day, weekday + 1, hour, minute, second, ntp_us % 1000_000))
+        lt = time.localtime(ntp_us // 1000_000)
+        # lt = (year, month, day, hour, minute, second, weekday, yearday)
+        # index  0      1     2    3      4       5       6         7
+
+        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000_000))
         cls._rtc_last_sync = ntp_us
 
     @classmethod
@@ -552,8 +560,11 @@ class Ntp:
             raise ValueError('Invalid parameter: compensate_us={} must be int'.format(compensate_us))
 
         rtc_us = cls.time_us(epoch = cls.EPOCH_2000, gmt = True) + compensate_us
-        year, month, day, hour, minute, second, weekday, *_ = time.localtime(rtc_us // 1000_000)
-        cls._datetime((year, month, day, weekday + 1, hour, minute, second, rtc_us % 1000_000))
+        lt = time.localtime(rtc_us // 1000_000)
+        # lt = (year, month, day, hour, minute, second, weekday, yearday)
+        # index  0      1     2    3      4       5       6         7
+
+        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000_000))
         cls._drift_last_compensate = rtc_us
 
     @classmethod
