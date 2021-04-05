@@ -397,7 +397,8 @@ class Ntp:
             time.sleep_us(100_000 - us)
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
-        return (time.time() + epoch + timezone_and_dst) * 1000_000 + cls._datetime()[7]
+        dt = cls._datetime()
+        return (time.mktime((dt[0], dt[1], dt[2], dt[4], dt[5], dt[6], 0, 0, 0)) + epoch + timezone_and_dst) * 1000_000 + dt[7]
 
     @classmethod
     def network_time(cls, epoch = None):
