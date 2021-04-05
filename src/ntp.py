@@ -72,7 +72,10 @@ class Ntp:
     _dst_start: tuple = ()
     # (month, week, day of week, hour)
     _dst_end: tuple = ()
+    # Time bias in seconds
     _dst_bias: int = 0
+    # Cache the switch hour calculation
+    _dst_cache_switch_hours = None
 
     # ========================================
     # Preallocate ram to prevent fragmentation
@@ -222,21 +225,33 @@ class Ntp:
         if not cls._dst_start or not cls._dst_end:
             return 0
 
-        dt = cls._datetime()
         # dt = (year, month, day, weekday, hours, minutes, seconds, subseconds)
         # index  0      1     2      3       4       5       6          7
+        dt = cls._datetime()
 
         if cls._dst_start[0] < dt[1] < cls._dst_end[0]:
+            cls._dst_cache_switch_hours = None
             return cls._dst_bias
-        elif cls._dst_start[0] == dt[1]:
-            # Switch time in hours since the beginning of the month
-            switch_hour = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
-            if (dt[2] * 24 + dt[4]) >= switch_hour:
+        elif dt[1] < cls._dst_start[0] or cls._dst_end[0] < dt[1]:
+            cls._dst_cache_switch_hours = None
+            return 0
+        elif dt[1] == cls._dst_start[0]:
+            # Cache the calculation for the switch time
+            if cls._dst_cache_switch_hours is None:
+                # Switch time in hours since the beginning of the month
+                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[
+                    3]
+
+            if (dt[2] * 24 + dt[4]) >= cls._dst_cache_switch_hours:
                 return cls._dst_bias
-        elif cls._dst_end[0] == dt[1]:
-            # Switch time in hours since the beginning of the month
-            switch_hour = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
-            if (dt[2] * 24 + dt[4]) < switch_hour:
+
+        elif dt[1] == cls._dst_end[0]:
+            # Cache the calculation for the switch time
+            if cls._dst_cache_switch_hours is None:
+                # Switch time in hours since the beginning of the month
+                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+
+            if (dt[2] * 24 + dt[4]) < cls._dst_cache_switch_hours:
                 return cls._dst_bias
 
         return 0
