@@ -90,9 +90,10 @@ class Ntp:
         the RTC allows the library te be chip-agnostic. With this strategy you can manipulate the internal RTC, any
         external or even multiple RTC chips if you wish.
 
-        :param callback: A callable object. With no arguments, this callable returns an 8-tuple with the
-        current date and time. With 1 argument (being an 8-tuple) it sets the date and time of the RTC. The format
-        of the 8-tuple is (year, month, day, weekday, hours, minutes, seconds, subseconds)
+        Args:
+            callback (function): A callable object. With no arguments, this callable returns an 8-tuple with the
+                current date and time. With 1 argument (being an 8-tuple) it sets the date and time of the RTC. The format
+                of the 8-tuple is (year, month, day, weekday, hours, minutes, seconds, subseconds)
         """
 
         if not callable(callback):
@@ -106,7 +107,8 @@ class Ntp:
         The default logger is print() and to set it just call the setter without any parameters.
         To disable logging, set the callback to "None".
 
-        :param callback: A callable object. Default value = print; None = disabled logger; Any other value raises exception
+        Args:
+            callback (function): A callable object. Default value = print; None = disabled logger; Any other value raises exception
         """
 
         if callback is not None and not callable(callback):
@@ -118,9 +120,10 @@ class Ntp:
     def set_dst(cls, start: tuple, end: tuple, bias: int):
         """ Set DST data in one pass.
 
-        :param start: 4-tuple(month, week, weekday, hour) start of DST
-        :param end:4-tuple(month, week, weekday, hour) end of DST
-        :param bias: integer Daylight Saving Time bias expressed in minutes
+        Args:
+            start (tuple): 4-tuple(month, week, weekday, hour) start of DST
+            end (tuple) :4-tuple(month, week, weekday, hour) end of DST
+            bias (int): Daylight Saving Time bias expressed in minutes
         """
         if not isinstance(start, tuple) or not len(start) == 4:
             raise ValueError("Invalid parameter: start={} must be a 4-tuple(month, week, weekday, hour)".format(start))
@@ -135,10 +138,11 @@ class Ntp:
     def set_dst_start(cls, month: int, week: int, weekday: int, hour: int):
         """ Set the start point of DST
 
-        :param month: integer in range 1(Jan) - 12(Dec)
-        :param week: integer in range 1 - 6. Sometimes there are months where they can span over a 6 weeks ex. 05.2021
-        :param weekday: integer in range 0(Mon) - 6(Sun)
-        :param hour: integer in range 0 - 23
+        Args:
+            month (int): number in range 1(Jan) - 12(Dec)
+            week (int): integer in range 1 - 6. Sometimes there are months where they can span over a 6 weeks ex. 05.2021
+            weekday (int): integer in range 0(Mon) - 6(Sun)
+            hour (int): integer in range 0 - 23
         """
 
         if not isinstance(month, int) or not cls.MONTH_JAN <= month <= cls.MONTH_DEC:
@@ -156,7 +160,8 @@ class Ntp:
     def get_dst_start(cls):
         """ Get the start point of DST.
 
-        :return: 4-tuple(month, week, weekday, hour)
+        Returns:
+            tuple: 4-tuple(month, week, weekday, hour)
         """
 
         return cls._dst_start
@@ -165,10 +170,11 @@ class Ntp:
     def set_dst_end(cls, month: int, week: int, weekday: int, hour: int):
         """ Set the end point of DST.
 
-        :param month: integer in range 1(Jan) - 12(Dec)
-        :param week: integer in range 1 - 6. Sometimes there are months where they can span over a 6 weeks
-        :param weekday: integer in range 0(Mon) - 6(Sun)
-        :param hour: integer in range 0 - 23
+        Args:
+            month (int): number in range 1(Jan) - 12(Dec)
+            week (int): number in range 1 - 6. Sometimes there are months where they can span over a 6 weeks.
+            weekday (int): number in range 0(Mon) - 6(Sun)
+            hour (int): number in range 0 - 23
         """
 
         if not isinstance(month, int) or not cls.MONTH_JAN <= month <= cls.MONTH_DEC:
@@ -186,7 +192,8 @@ class Ntp:
     def get_dst_end(cls):
         """ Get the end point of DST.
 
-        :return: 4-tuple(month, week, weekday, hour)
+        Returns:
+            tuple: 4-tuple(month, week, weekday, hour)
         """
 
         return cls._dst_end
@@ -195,7 +202,8 @@ class Ntp:
     def set_dst_time_bias(cls, bias: int):
         """ Set Daylight Saving Time bias expressed in minutes.
 
-        :param bias: minutes of the DST bias. Correct values are 30, 60, 90 and 120
+        Args:
+            bias (int): minutes of the DST bias. Correct values are 30, 60, 90 and 120
         """
 
         if not isinstance(bias, int) or bias not in (30, 60, 90, 120):
@@ -208,7 +216,8 @@ class Ntp:
     def get_dst_time_bias(cls):
         """ Get Daylight Saving Time bias expressed in minutes.
 
-        :return: minutes of the DST bias. Valid values are 30, 60, 90 and 120
+        Returns:
+            int: minutes of the DST bias. Valid values are 30, 60, 90 and 120
         """
 
         # Convert the time bias to minutes
@@ -218,7 +227,8 @@ class Ntp:
     def dst(cls):
         """ Calculate if DST is currently in effect and return the bias in seconds.
 
-        :return: Calculated DST bias in seconds
+        Returns:
+            int: Calculated DST bias in seconds
         """
 
         # When DST is disabled, return 0
@@ -260,8 +270,8 @@ class Ntp:
     def set_ntp_timeout(cls, timeout_s: int = 1):
         """ Set a timeout of the requests to the NTP servers. Default is 1 sec.
 
-
-        :param timeout_s: Timeout in seconds of the request
+        Args:
+            timeout_s (int): Timeout in seconds of the request
         """
 
         if not isinstance(timeout_s, int):
@@ -273,7 +283,8 @@ class Ntp:
     def ntp_timeout(cls):
         """ Get the timeout for the requests to the NTP servers.
 
-        :return: Timeout in seconds
+        Returns:
+            int: Timeout in seconds
         """
 
         return cls._ntp_timeout_s
@@ -282,7 +293,8 @@ class Ntp:
     def hosts(cls):
         """ Get a tuple of NTP servers.
 
-        :return: Tuple with the NTP servers
+        Returns:
+            tuple: NTP servers
         """
 
         return tuple(cls._hosts)
@@ -291,7 +303,8 @@ class Ntp:
     def set_hosts(cls, value: tuple):
         """ Set a tuple with NTP servers.
 
-        :param value: A tuple containing NTP servers. Can contain hostnames or IP addresses
+        Args:
+            value (tuple): NTP servers. Can contain hostnames or IP addresses
         """
 
         cls._hosts.clear()
@@ -304,7 +317,8 @@ class Ntp:
     def timezone(cls):
         """ Get the timezone as a tuple.
 
-        :return: The timezone as a 2-tuple(hour, minute)
+        Returns:
+            tuple: The timezone as a 2-tuple(hour, minute)
         """
 
         return cls._timezone // 3600, (cls._timezone % 3600) // 60
@@ -314,8 +328,9 @@ class Ntp:
         """ Set the timezone. The typical time shift is multiple of a whole hour, but a time shift with minutes is also
         possible. A basic validity chek is made for the correctness of the timezone.
 
-        :param hour: hours offset of the timezone. Type is 'int'
-        :param minute: minutes offset of the timezone. Type is 'int'
+        Args:
+            hour (int): hours offset of the timezone. Type is 'int'
+            minute (int): minutes offset of the timezone. Type is 'int'
         """
 
         if not isinstance(hour, int):
@@ -337,8 +352,11 @@ class Ntp:
     def time(cls, utc: bool = False):
         """ Get a tuple with the date and time in UTC or local timezone + DST.
 
-        :param utc: boolean according to UTC time
-        :return: 9-tuple(year, month, day, weekday, yearday, hour, minute, second, us)
+        Args:
+            utc (bool): the returned time will be according to UTC time
+
+        Returns:
+            tuple: 9-tuple(year, month, day, weekday, yearday, hour, minute, second, us)
         """
 
         us = cls.time_us(utc = utc)
@@ -354,10 +372,13 @@ class Ntp:
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
-        :param epoch: an epoch according to which the time will be be calculated.
-        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :param utc: boolean according to UTC time
-        :return: the time in seconds since the selected epoch
+        Args:
+            epoch (int): an epoch according to which the time will be be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+            utc (bool): the returned time will be according to UTC time
+
+        Returns:
+            int: the time in seconds since the selected epoch
         """
 
         return cls.time_us(epoch = epoch, utc = utc) // 1000_000
@@ -368,10 +389,13 @@ class Ntp:
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
-        :param epoch: an epoch according to which the time will be be calculated.
-        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :param utc: boolean according to UTC time
-        :return: the time in milliseconds since the selected epoch
+        Args:
+            epoch (int): an epoch according to which the time will be be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+            utc (bool): the returned time will be according to UTC time
+
+        Returns:
+            int: the time in milliseconds since the selected epoch
         """
 
         return cls.time_us(epoch = epoch, utc = utc) // 1000
@@ -382,10 +406,13 @@ class Ntp:
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
-        :param epoch: an epoch according to which the time will be be calculated.
-        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :param utc: boolean according to UTC time
-        :return: integer the time in microseconds since the selected epoch
+        Args:
+            epoch (int): an epoch according to which the time will be be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+            utc (bool): the returned time will be according to UTC time
+
+        Returns:
+            int: integer the time in microseconds since the selected epoch
         """
 
         epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
@@ -406,12 +433,15 @@ class Ntp:
         does not respond within the timeout period, the next server in the list is used. The default timeout is 1 sec.
         The timeout can be changed with `set_ntp_timeout()`. When none of the servers respond, throw an Exception.
 
-        :param epoch: an epoch according to which the time will be be calculated.
-        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :return: 2-tuple(ntp time, timestamp). First position contains the accurate time(UTC) from the NTP
-        server in nanoseconds. The second position in the tuple is a timestamp in microseconds taken at the time the
-        request to the server was sent. This timestamp can be used later to compensate for the difference in time from
-        when the request was sent and the current timestamp, taken with time.ticks_us()
+        Args:
+            epoch (int): an epoch according to which the time will be be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+
+        Returns:
+            tuple: 2-tuple(ntp time, timestamp). First position contains the accurate time(UTC) from the NTP
+                server in nanoseconds. The second position in the tuple is a timestamp in microseconds taken at the time the
+                request to the server was sent. This timestamp can be used later to compensate for the difference in time from
+                when the request was sent and the current timestamp, taken with time.ticks_us()
         """
 
         if not any(cls._hosts):
@@ -457,11 +487,14 @@ class Ntp:
         you can pass an optional parameter with the new time. This is useful when your device has
         an accurate RTC on board, which can be used instead of the costly NTP queries.
 
-        :param new_time: None or 2-tuple(time, timestamp). If None, the RTC will be synchronized
-        from the NTP server. I 2-tuple is passed, the RTC will be synchronized with the given value.
-        The 2-tuple format is (time, timestamp), where:
-         * time = the micro second time in UTC since epoch 00:00:00 on 1 January 2000
-         * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled
+        Args:
+            new_time (tuple, None): None or 2-tuple(time, timestamp). If None, the RTC will be synchronized
+                from the NTP server. I 2-tuple is passed, the RTC will be synchronized with the given value.
+                The 2-tuple format is (time, timestamp), where:
+
+                * time = the micro second time in UTC since epoch 00:00:00 on 1 January 2000
+
+                * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled
         """
 
         if new_time is None:
@@ -484,10 +517,13 @@ class Ntp:
     def rtc_last_sync(cls, epoch: int = None, utc: bool = False):
         """ Get the last time the RTC was synchronized.
 
-        :param epoch: an epoch according to which the time will be be calculated.
-        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :param utc: boolean according to UTC time
-        :return: RTC last sync time in micro seconds by taking into account epoch and utc
+        Args:
+            epoch (int): an epoch according to which the time will be be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+            utc (bool): the returned time will be according to UTC time
+
+        Returns:
+            int: RTC last sync time in micro seconds by taking into account epoch and utc
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
@@ -512,16 +548,21 @@ class Ntp:
         micro seconds call drift_us(). Example: drift_compensate(drift_us()).
         The calculated drift is stored and can be retrieved later with drift_ppm().
 
-        :param new_time: None or 2-tuple(time, timestamp). If None, the RTC will be synchronized
-        from the NTP server. I 2-tuple is passed, the RTC will be synchronized with the given value.
-        The 2-tuple format is (time, timestamp), where:
-         * time = the micro second time in UTC since epoch 00:00:00 on 1 January 2000
-         * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled
-        :return: 2-tuple(ppm, us) ppm is a float and represents the calculated drift in ppm
-        units; us is integer and contains the absolute drift in micro seconds.
-        Both parameters can have negative and positive values. The sign shows in which
-        direction the RTC is drifting. Positive values represent a RTC that is speeding,
-        while negative values represent RTC that is lagging
+        Args:
+            new_time (tuple): None or 2-tuple(time, timestamp). If None, the RTC will be synchronized
+                from the NTP server. I 2-tuple is passed, the RTC will be compensated with the given value.
+                The 2-tuple format is (time, timestamp), where:
+
+                * time = the micro second time in UTC since epoch 00:00:00 on 1 January 2000
+
+                * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled
+
+        Returns:
+            tuple: 2-tuple(ppm, us) ppm is a float and represents the calculated drift in ppm
+                units; us is integer and contains the absolute drift in micro seconds.
+                Both parameters can have negative and positive values. The sign shows in which
+                direction the RTC is drifting. Positive values represent a RTC that is speeding,
+                while negative values represent RTC that is lagging
         """
 
         # The RTC has not been synchronized, and the actual drift can not be calculated
@@ -550,10 +591,13 @@ class Ntp:
     def drift_last_compensate(cls, epoch: int = None, utc: bool = False):
         """ Get the last time the RTC was compensated based on the drift calculation.
 
-        :param epoch: an epoch according to which the time will be be calculated.
-        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :param utc: boolean according to UTC time
-        :return: RTC last compensate time in micro seconds by taking into account epoch and utc
+        Args:
+            epoch (int): an epoch according to which the time will be be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+            utc (bool): the returned time will be according to UTC time
+
+        Returns:
+            int: RTC last compensate time in micro seconds by taking into account epoch and utc
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
@@ -564,10 +608,13 @@ class Ntp:
     def drift_last_calculate(cls, epoch: int = None, utc: bool = False):
         """ Get the last time the drift was calculated.
 
-        :param epoch: an epoch according to which the time will be be calculated.
-        Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
-        :param utc: boolean according to UTC time
-        :return: the last drift calculation time in micro seconds by taking into account epoch and utc
+        Args:
+            epoch (int): an epoch according to which the time will be be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
+            utc (bool): the returned time will be according to UTC time
+
+        Returns:
+            int: the last drift calculation time in micro seconds by taking into account epoch and utc
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
@@ -578,7 +625,8 @@ class Ntp:
     def drift_ppm(cls):
         """ Get the calculated or manually set drift in ppm units.
 
-        :return: positive or negative float containing the drift value in ppm units
+        Returns:
+            float: positive or negative number containing the drift value in ppm units
         """
 
         return cls._ppm_drift
@@ -590,8 +638,9 @@ class Ntp:
         The ppm can be calculated in advance and stored in a Non Volatile Storage as calibration
         data. That way the drift_calculate() as well as the long wait period can be skipped.
 
-        :param ppm: positive or negative float or integer containing the drift value in ppm units.
-        Positive values represent a speeding, while negative values represent a lagging RTC
+        Args:
+            ppm (float, int): positive or negative number containing the drift value in ppm units.
+                Positive values represent a speeding, while negative values represent a lagging RTC
         """
 
         if not isinstance(ppm, (float, int)):
@@ -603,11 +652,14 @@ class Ntp:
     def drift_us(cls, ppm_drift: float = None):
         """ Calculate the drift in absolute micro seconds.
 
-        :param ppm_drift: if None, use the previously calculated or manually set ppm.
-        If you pass a value other than None, the drift is calculated according to this
-        value
-        :return: integer containing the calculated drift in micro seconds.
-        Positive values represent a speeding, while negative values represent a lagging RTC
+        Args:
+            ppm_drift (float, None): if None, use the previously calculated or manually set ppm.
+                If you pass a value other than None, the drift is calculated according to this
+                value
+
+        Returns:
+            int: number containing the calculated drift in micro seconds.
+                Positive values represent a speeding, while negative values represent a lagging RTC
         """
 
         if cls._rtc_last_sync == 0 and cls._drift_last_compensate == 0:
@@ -629,7 +681,8 @@ class Ntp:
         """ Compensate the RTC by adding the compensate_us parameter to it. The value can be
         positive or negative, depending how you wish to compensate the RTC.
 
-        :param compensate_us: the microseconds that will be added to the RTC
+        Args:
+            compensate_us (int): the microseconds that will be added to the RTC
         """
 
         if not isinstance(compensate_us, int):
@@ -644,13 +697,16 @@ class Ntp:
         cls._drift_last_compensate = rtc_us
 
     @classmethod
-    def weekday(cls, year, month, day):
+    def weekday(cls, year: int, month: int, day: int):
         """ Find Weekday using Zeller's Algorithm, from the year, month and day.
 
-        :param year: the year greater than 1
-        :param month: the month valid range 1-12
-        :param day: the day valid range 1-31
-        :return: integer 0(Mon) 1(Tue) 2(Wed) 3(Thu) 4(Fri) 5(Sat) to 6(Sun)
+        Args:
+            year (int): number greater than 1
+            month (int): number in range 1(Jan) - 12(Dec)
+            day (int): number in range 1-31
+
+        Returns:
+            int: 0(Mon) 1(Tue) 2(Wed) 3(Thu) 4(Fri) 5(Sat) to 6(Sun)
         """
 
         if not isinstance(year, int) or not 1 <= year:
@@ -676,9 +732,12 @@ class Ntp:
     def days_in_month(cls, year, month):
         """ Calculate how many days are in a given year and month
 
-        :param year: the year greater than 1
-        :param month: the month valid range 1-12
-        :return:
+        Args:
+            year (int): number greater than 1
+            month (int): number in range 1(Jan) - 12(Dec)
+
+        Returns:
+            int: the number of days in the given month
         """
 
         if not isinstance(year, int) or not 1 <= year:
@@ -703,11 +762,13 @@ class Ntp:
         the first week consists of just two days: Sat and Sun; the last week consists of just a single
         day: Mon
 
+        Args:
+            year (int): number greater than 1
+            month (int): number in range 1(Jan) - 12(Dec)
 
-        :param year: the year greater than 1
-        :param month: the month valid range 1-12
-        :return: list containing 2-tuples of weeks. Each tuple contains the first and the last day
-        of the current week. Example result for May 2021: [(1, 2), (3, 9), (10, 16), (17, 23), (24, 30), (31, 31)]
+        Returns:
+            list: 2-tuples of weeks. Each tuple contains the first and the last day of the current week.
+                Example result for May 2021: [(1, 2), (3, 9), (10, 16), (17, 23), (24, 30), (31, 31)]
         """
 
         if not isinstance(year, int) or not 1 <= year:
@@ -739,11 +800,16 @@ class Ntp:
         Example: day_from_week_and_weekday(2021, Ntp.MONTH_MAR, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN)
                  day_from_week_and_weekday(2021, Ntp.MONTH_OCT, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN)
 
-        :param year: the year greater than 1
-        :param month: the month valid range 1-12
-        :param week: in range 1-6
-        :param weekday: in range 0(Mon)-6(Sun)
-        :return: the day, the last weekday in the month or raise an exception
+        Args:
+            year (int): number greater than 1
+            month (int): number in range 1(Jan) - 12(Dec)
+            week (int): number in range 1-6
+            weekday (int): number in range 0(Mon)-6(Sun)
+
+        Returns:
+            int: the calculated day. If the day is outside the boundaries of the month, returns
+                the last weekday in the month. If the weekday is outside the boundaries of the
+                given week, raise an exception
         """
 
         if not isinstance(year, int) or not 1 <= year:
@@ -776,7 +842,8 @@ class Ntp:
     def _log(cls, message: str):
         """ Use the logger callback to log a message.
 
-        :param message: string of the message
+        Args:
+            message (str): the message to be passed to the logger
         """
 
         if callable(cls._log_callback):
@@ -786,9 +853,9 @@ class Ntp:
     def _datetime(cls, dt = None):
         """ Access the RTC trough the callback. This is a setter and getter function.
 
-
-        :param dt: None or 8-tuple(year, month, day, weekday, hours, minutes, seconds, subseconds)
-        If None, the function acts as a getter. If a tuple, the function acts as a setter
+        Args:
+            dt (tuple, None): None or 8-tuple(year, month, day, weekday, hours, minutes, seconds, subseconds)
+                If None, the function acts as a getter. If a tuple, the function acts as a setter
         """
 
         if not callable(cls._datetime_callback):
@@ -806,8 +873,11 @@ class Ntp:
     def _validate_hostname(hostname: str):
         """ Check if a hostname is valid.
 
-        :param hostname: string of the hostname
-        :return: True on success, False on error
+        Args:
+            hostname (str): the hostname to be validated
+
+        Returns:
+            bool: True on success, False on error
         """
 
         if not isinstance(hostname, str):
@@ -834,9 +904,12 @@ class Ntp:
     def _select_epoch(cls, epoch, epoch_list):
         """ Helper function to select an epoch from a given 3-tuple of epochs
 
-        :param epoch: epoch index to return
-        :param epoch_list: a 3-tuple with the epochs
-        :return: the selected epoch
+        Args:
+            epoch (int): epoch index to return
+            epoch_list (tuple): a 3-tuple with the epochs
+
+        Returns:
+            int: the selected epoch
         """
 
         if epoch is None or epoch_list is None:
