@@ -18,7 +18,11 @@ try:
 except ImportError:
     import re
 
-from micropython import const
+try:
+    from micropython import const
+except ImportError:
+    def const(v):
+        return v
 
 _NTP_DELTA_1900_1970 = const(2208988800)  # Seconds between 1900 and 1970
 _NTP_DELTA_1900_2000 = const(3155673600)  # Seconds between 1900 and 2000
@@ -310,7 +314,7 @@ class Ntp:
         cls._hosts.clear()
 
         for host in value:
-            if cls._validate_hostname(host):
+            if cls._validate_host(host):
                 cls._hosts.append(host)
 
     @classmethod
@@ -870,6 +874,22 @@ class Ntp:
                 'Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hours, minutes, seconds, subseconds)'.format(dt))
 
     @staticmethod
+    def _validate_host(host: str):
+        """ Check if a host is valid. A host can be any valid hostname or IP address
+
+        Args:
+            host (str): hostname or IP address in dot notation to be validated
+
+        Returns:
+            bool: True on success, False on error
+        """
+
+        if Ntp._validate_ip(host) or Ntp._validate_hostname(host):
+            return True
+
+        return False
+
+    @staticmethod
     def _validate_hostname(hostname: str):
         """ Check if a hostname is valid.
 
@@ -883,10 +903,8 @@ class Ntp:
         if not isinstance(hostname, str):
             raise ValueError('Invalid parameter: hostname={} must be a string'.format(hostname))
 
-        # TODO: Implement IP validation in dot notation
-
         # strip exactly one dot from the right, if present
-        if hostname[-1] == ".":
+        if hostname[-1] == '.':
             hostname = hostname[:-1]
 
         if not (0 < len(hostname) <= 253):
@@ -896,6 +914,31 @@ class Ntp:
 
         # the TLD must be not all-numeric
         if re.match(r'[0-9]+$', labels[-1]):
+            return False
+
+        allowed = re.compile(r'^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9_\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9_\-]*[A-Za-z0-9])$')
+        if not allowed.match(hostname):
+            return False
+
+        return True
+
+    @staticmethod
+    def _validate_ip(ip: str):
+        """ Check if the IP is a valid IP address in dot notation
+
+        Args:
+            ip (str): the ip to be validated
+
+        Returns:
+            bool: True on success, False on error
+        """
+
+        if not isinstance(ip, str):
+            raise ValueError('Invalid parameter: ip={} must be a string'.format(ip))
+
+        allowed = re.compile(
+            r'^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)$')
+        if allowed.match(ip) is None:
             return False
 
         return True
