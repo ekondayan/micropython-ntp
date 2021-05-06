@@ -676,7 +676,7 @@ class Ntp:
             raise ValueError('Invalid parameter: ppm_drift={} must be float or int'.format(ppm_drift))
 
         delta_time_rtc = cls.time_us(epoch = cls.EPOCH_2000, utc = True) - max(cls._rtc_last_sync, cls._drift_last_compensate)
-        delta_time_real = (1000_000 * delta_time_rtc) // (1000_000 + ppm_drift)
+        delta_time_real = int((1000_000 * delta_time_rtc) // (1000_000 + ppm_drift))
 
         return delta_time_rtc - delta_time_real
 
