@@ -583,7 +583,7 @@ class Ntp:
         rtc_us = cls.time_us(epoch = cls.EPOCH_2000, utc = True)
         # For maximum precision, negate the execution time of all the instructions up to this point
         ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
-        # Calculate the delta between thu current time and the last rtc sync or last compensate(whatever occurred last)
+        # Calculate the delta between the current time and the last rtc sync or last compensate(whatever occurred last)
         rtc_sync_delta = ntp_us - max(cls._rtc_last_sync, cls._drift_last_compensate)
         rtc_ntp_delta = rtc_us - ntp_us
         cls._ppm_drift = (rtc_ntp_delta / rtc_sync_delta) * 1000_000
