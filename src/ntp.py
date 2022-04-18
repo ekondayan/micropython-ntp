@@ -98,6 +98,9 @@ class Ntp:
             callback (function): A callable object. With no arguments, this callable returns an 8-tuple with the
                 current date and time. With 1 argument (being an 8-tuple) it sets the date and time of the RTC. The format
                 of the 8-tuple is (year, month, day, weekday, hours, minutes, seconds, subseconds)
+
+                !!! NOTE !!!
+                Monday is index 0
         """
 
         if not callable(callback):
@@ -377,7 +380,7 @@ class Ntp:
         set utc to True.
 
         Args:
-            epoch (int): an epoch according to which the time will be be calculated.
+            epoch (int): an epoch according to which the time will be calculated.
                 Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
             utc (bool): the returned time will be according to UTC time
 
@@ -394,7 +397,7 @@ class Ntp:
         set utc to True.
 
         Args:
-            epoch (int): an epoch according to which the time will be be calculated.
+            epoch (int): an epoch according to which the time will be calculated.
                 Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
             utc (bool): the returned time will be according to UTC time
 
@@ -411,7 +414,7 @@ class Ntp:
         set utc to True.
 
         Args:
-            epoch (int): an epoch according to which the time will be be calculated.
+            epoch (int): an epoch according to which the time will be calculated.
                 Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
             utc (bool): the returned time will be according to UTC time
 
@@ -419,7 +422,7 @@ class Ntp:
             int: integer the time in microseconds since the selected epoch
         """
 
-        epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
+        epoch = cls._select_epoch(epoch)
 
         # Do not take the value when on the verge of the next second
         # This is required to ensure that the sec and usec will be read within the boundaries of one second
@@ -438,7 +441,7 @@ class Ntp:
         The timeout can be changed with `set_ntp_timeout()`. When none of the servers respond, throw an Exception.
 
         Args:
-            epoch (int): an epoch according to which the time will be be calculated.
+            epoch (int): an epoch according to which the time will be calculated.
                 Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
 
         Returns:
@@ -493,12 +496,12 @@ class Ntp:
 
         Args:
             new_time (tuple, None): None or 2-tuple(time, timestamp). If None, the RTC will be synchronized
-                from the NTP server. I 2-tuple is passed, the RTC will be synchronized with the given value.
+                from the NTP server. If 2-tuple is passed, the RTC will be synchronized with the given value.
                 The 2-tuple format is (time, timestamp), where:
 
                 * time = the micro second time in UTC since epoch 00:00:00 on 1 January 2000
 
-                * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled
+                * timestamp = micro second timestamp at the moment the time was sampled
         """
 
         if new_time is None:
@@ -522,7 +525,7 @@ class Ntp:
         """ Get the last time the RTC was synchronized.
 
         Args:
-            epoch (int): an epoch according to which the time will be be calculated.
+            epoch (int): an epoch according to which the time will be calculated.
                 Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
             utc (bool): the returned time will be according to UTC time
 
@@ -531,7 +534,7 @@ class Ntp:
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
-        epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
+        epoch = cls._select_epoch(epoch)
         return 0 if cls._rtc_last_sync == 0 else cls._rtc_last_sync + (epoch + timezone_and_dst) * 1000_000
 
     @classmethod
@@ -575,9 +578,7 @@ class Ntp:
 
         if new_time is None:
             new_time = cls.network_time(cls.EPOCH_2000)
-        elif isinstance(new_time, tuple) and len(new_time) == 2:
-            pass
-        else:
+        elif not isinstance(new_time, tuple) or not len(new_time) == 2:
             raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(ppm))
 
         rtc_us = cls.time_us(epoch = cls.EPOCH_2000, utc = True)
@@ -596,7 +597,7 @@ class Ntp:
         """ Get the last time the RTC was compensated based on the drift calculation.
 
         Args:
-            epoch (int): an epoch according to which the time will be be calculated.
+            epoch (int): an epoch according to which the time will be calculated.
                 Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
             utc (bool): the returned time will be according to UTC time
 
@@ -605,7 +606,7 @@ class Ntp:
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
-        epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
+        epoch = cls._select_epoch(epoch)
         return 0 if cls._drift_last_compensate == 0 else cls._drift_last_compensate + (epoch + timezone_and_dst) * 1000_000
 
     @classmethod
@@ -613,7 +614,7 @@ class Ntp:
         """ Get the last time the drift was calculated.
 
         Args:
-            epoch (int): an epoch according to which the time will be be calculated.
+            epoch (int): an epoch according to which the time will be calculated.
                 Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
             utc (bool): the returned time will be according to UTC time
 
@@ -622,7 +623,7 @@ class Ntp:
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
-        epoch = cls._select_epoch(epoch, (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
+        epoch = cls._select_epoch(epoch)
         return 0 if cls._drift_last_calculate == 0 else cls._drift_last_calculate + (epoch + timezone_and_dst) * 1000_000
 
     @classmethod
@@ -797,7 +798,7 @@ class Ntp:
     def day_from_week_and_weekday(cls, year, month, week, weekday):
         """ Calculate the day based on year, month, week and weekday. If the selected week is
         outside the boundaries of the month, the last weekday of the month will be returned.
-        Otherwise if the weekday is within the boundaries of the month but is outside the
+        Otherwise, if the weekday is within the boundaries of the month but is outside the
         boundaries of the week, raise an exception. This behaviour is desired when you want
         to select the last weekday of the month, like the last Sunday of October or the
         last Sunday of March.
@@ -944,7 +945,7 @@ class Ntp:
         return True
 
     @classmethod
-    def _select_epoch(cls, epoch, epoch_list):
+    def _select_epoch(cls, epoch = None, epoch_list = None):
         """ Helper function to select an epoch from a given 3-tuple of epochs
 
         Args:
@@ -955,13 +956,14 @@ class Ntp:
             int: the selected epoch
         """
 
-        if epoch is None or epoch_list is None:
+        if epoch is None:
             return 0
-
-        if not isinstance(epoch, int) or epoch not in (cls.EPOCH_1900, cls.EPOCH_1970, cls.EPOCH_2000):
+        elif epoch not in (cls.EPOCH_1900, cls.EPOCH_1970, cls.EPOCH_2000):
             raise ValueError('Invalid parameter: epoch={}'.format(epoch))
 
-        if not isinstance(epoch_list, tuple) or len(epoch_list) != 3:
+        if epoch_list is None:
+            return (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0)[epoch]
+        elif not isinstance(epoch_list, tuple) or len(epoch_list) != 3:
             raise ValueError('Invalid parameter: epoch_list={} must be a tuple and its length must be 3'.format(epoch_list))
 
         return epoch_list[epoch]
