@@ -7,8 +7,8 @@ app_pdoc = pdoc3
 all: docs
 
 docs: $(src_files)
-	PYTHONDONTWRITEBYTECODE=1 $(app_pdoc) --html -o $(dir_docs_html) $(src_files) --force 
+	PYTHONDONTWRITEBYTECODE=1 $(app_pdoc) --html -o $(dir_docs_html) $(src_files) --force
 
 clean:
-	rm -f $(dir_docs)/*
+	rm -rf $(dir_docs)/*
 

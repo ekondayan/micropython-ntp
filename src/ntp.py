@@ -242,7 +242,7 @@ class Ntp:
         if not cls._dst_start or not cls._dst_end:
             return 0
 
-        # dt = (year, month, day, weekday, hours, minutes, seconds, subseconds)
+        # dt = (year, month, day, hours, minutes, seconds, weekday, subseconds)
         # index  0      1     2      3       4       5       6          7
         dt = cls._datetime()
 
@@ -256,10 +256,9 @@ class Ntp:
             # Cache the calculation for the switch time
             if cls._dst_cache_switch_hours is None:
                 # Switch time in hours since the beginning of the month
-                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[
-                    3]
+                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
 
-            if (dt[2] * 24 + dt[4]) >= cls._dst_cache_switch_hours:
+            if (dt[2] * 24 + dt[3]) >= cls._dst_cache_switch_hours:
                 return cls._dst_bias
 
         elif dt[1] == cls._dst_end[0]:
@@ -268,7 +267,7 @@ class Ntp:
                 # Switch time in hours since the beginning of the month
                 cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
 
-            if (dt[2] * 24 + dt[4]) < cls._dst_cache_switch_hours:
+            if (dt[2] * 24 + dt[3]) < cls._dst_cache_switch_hours:
                 return cls._dst_bias
 
         return 0
@@ -363,15 +362,12 @@ class Ntp:
             utc (bool): the returned time will be according to UTC time
 
         Returns:
-            tuple: 9-tuple(year, month, day, weekday, yearday, hour, minute, second, us)
+            tuple: 9-tuple(year, month, day, hour, minute, second, weekday, yearday, us)
         """
 
         us = cls.time_us(utc = utc)
-        lt = time.localtime(us // 1000_000)
-        # lt = (year, month, day, hour, minute, second, weekday, yearday)
-        # index  0      1     2    3      4       5       6         7
-
-        return lt[0], lt[1], lt[2], lt[6], lt[7], lt[3], lt[4], lt[5], us % 1000_000
+        # (year, month, day, hour, minute, second, weekday, yearday) + (us,)
+        return time.localtime(us // 1000_000) + (us % 1000_000, )
 
     @classmethod
     def time_s(cls, epoch = None, utc: bool = False):
@@ -432,7 +428,7 @@ class Ntp:
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
         dt = cls._datetime()
-        return (time.mktime((dt[0], dt[1], dt[2], dt[4], dt[5], dt[6], 0, 0, 0)) + epoch + timezone_and_dst) * 1000_000 + dt[7]
+        return (time.mktime((dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], 0, 0, 0)) + epoch + timezone_and_dst) * 1000_000 + dt[7]
 
     @classmethod
     def network_time(cls, epoch = None):
@@ -551,18 +547,21 @@ class Ntp:
         To get more stable and reliable data, periods of more than 2 hours are suggested.
         The longer the better.
         Once the drift is calculated, the device can go offline and periodically call
-        drift_compensate() to keep the RTC accurate. To calculate the drift in absoluse
+        drift_compensate() to keep the RTC accurate. To calculate the drift in absolute
         micro seconds call drift_us(). Example: drift_compensate(drift_us()).
         The calculated drift is stored and can be retrieved later with drift_ppm().
 
         Args:
             new_time (tuple): None or 2-tuple(time, timestamp). If None, the RTC will be synchronized
-                from the NTP server. I 2-tuple is passed, the RTC will be compensated with the given value.
+                from the NTP server. If 2-tuple is passed, the RTC will be compensated with the given value.
                 The 2-tuple format is (time, timestamp), where:
 
                 * time = the micro second time in UTC since epoch 00:00:00 on 1 January 2000
 
-                * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled
+                * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled.
+                              Example:
+                                  from time import ticks_us
+                                  timestamp = ticks_us()
 
         Returns:
             tuple: 2-tuple(ppm, us) ppm is a float and represents the calculated drift in ppm
@@ -640,8 +639,8 @@ class Ntp:
     def set_drift_ppm(cls, ppm: float):
         """ Manually set the drift in ppm units. If you know in advance the actual drift you can
         set it with this function.
-        The ppm can be calculated in advance and stored in a Non Volatile Storage as calibration
-        data. That way the drift_calculate() as well as the long wait period can be skipped.
+        The ppm can be calculated in advance and stored in a Non-Volatile Storage as calibration
+        data. That way the drift_calculate() as well as the initial long wait period can be skipped.
 
         Args:
             ppm (float, int): positive or negative number containing the drift value in ppm units.
@@ -684,7 +683,7 @@ class Ntp:
     @classmethod
     def drift_compensate(cls, compensate_us: int):
         """ Compensate the RTC by adding the compensate_us parameter to it. The value can be
-        positive or negative, depending how you wish to compensate the RTC.
+        positive or negative, depending on how you wish to compensate the RTC.
 
         Args:
             compensate_us (int): the microseconds that will be added to the RTC
@@ -759,8 +758,8 @@ class Ntp:
     @classmethod
     def weeks_in_month(cls, year, month):
         """ Split the month into tuples of weeks. The definition of a week is from Mon to Sun.
-        If a month starts on a day different than Monday, the first week will be: day 1 to the day of the
-        first Sunday. If a month ends on a day differeent than the Sunday, the last week will be: the last
+        If a month starts on a day different from Monday, the first week will be: day 1 to the day of the
+        first Sunday. If a month ends on a day different from the Sunday, the last week will be: the last
         Monday till the end of the month. A month can have up to 6 weeks in it.
         For example if we run this function for May 2021, the result will be:
         [(1, 2), (3, 9), (10, 16), (17, 23), (24, 30), (31, 31)]. You can clearly see that
@@ -856,10 +855,10 @@ class Ntp:
 
     @classmethod
     def _datetime(cls, dt = None):
-        """ Access the RTC trough the callback. This is a setter and getter function.
+        """ Access the RTC through the callback. This is a setter and getter function.
 
         Args:
-            dt (tuple, None): None or 8-tuple(year, month, day, weekday, hours, minutes, seconds, subseconds)
+            dt (tuple, None): None or 8-tuple(year, month, day, hours, minutes, seconds, weekday, subseconds)
                 If None, the function acts as a getter. If a tuple, the function acts as a setter
         """
 
@@ -872,7 +871,7 @@ class Ntp:
             cls._datetime_callback(dt)
         else:
             raise ValueError(
-                'Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hours, minutes, seconds, subseconds)'.format(dt))
+                'Invalid parameter: dt={} must be a 8-tuple(year, month, day, hours, minutes, seconds, weekday, subseconds)'.format(dt))
 
     @staticmethod
     def _validate_host(host: str):
@@ -945,20 +944,19 @@ class Ntp:
         return True
 
     @classmethod
-    def _select_epoch(cls, epoch = None, epoch_list = None):
+    def _select_epoch(cls, epoch, epoch_list = None):
         """ Helper function to select an epoch from a given 3-tuple of epochs
 
         Args:
             epoch (int): epoch index to return
-            epoch_list (tuple): a 3-tuple with the epochs
+            epoch_list (tuple): a 3-tuple with the epochs. Each item in the tuple represents
+                the seconds between year 2000 and the one that the item represents.
 
         Returns:
             int: the selected epoch
         """
 
-        if epoch is None:
-            return 0
-        elif epoch not in (cls.EPOCH_1900, cls.EPOCH_1970, cls.EPOCH_2000):
+        if epoch not in (cls.EPOCH_1900, cls.EPOCH_1970, cls.EPOCH_2000):
             raise ValueError('Invalid parameter: epoch={}'.format(epoch))
 
         if epoch_list is None:
