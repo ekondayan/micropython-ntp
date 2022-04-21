@@ -502,9 +502,7 @@ class Ntp:
 
         if new_time is None:
             new_time = cls.network_time(cls.EPOCH_2000)
-        elif isinstance(new_time, tuple) and len(new_time) == 2:
-            pass
-        else:
+        elif not isinstance(new_time, tuple) or not len(new_time) == 2:
             raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(ppm))
 
         # Negate the execution time of all the instructions up to this point
@@ -944,7 +942,7 @@ class Ntp:
         return True
 
     @classmethod
-    def _select_epoch(cls, epoch, epoch_list = None):
+    def _select_epoch(cls, epoch = None, epoch_list = None):
         """ Helper function to select an epoch from a given 3-tuple of epochs
 
         Args:
@@ -955,6 +953,9 @@ class Ntp:
         Returns:
             int: the selected epoch
         """
+
+        if epoch is None:
+            epoch = cls.EPOCH_2000
 
         if epoch not in (cls.EPOCH_1900, cls.EPOCH_1970, cls.EPOCH_2000):
             raise ValueError('Invalid parameter: epoch={}'.format(epoch))
