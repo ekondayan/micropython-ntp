@@ -485,7 +485,7 @@ class Ntp:
         raise RuntimeError('Can not connect to any of the NTP servers')
 
     @classmethod
-    def rtc_sync(cls, new_time = None):
+    def rtc_sync(cls, new_time = None, epoch = None):
         """ Synchronize the RTC with the time from the NTP server. To bypass the NTP server,
         you can pass an optional parameter with the new time. This is useful when your device has
         an accurate RTC on board, which can be used instead of the costly NTP queries.
@@ -498,10 +498,13 @@ class Ntp:
                 * time = the micro second time in UTC since epoch 00:00:00 on 1 January 2000
 
                 * timestamp = micro second timestamp at the moment the time was sampled
+            epoch (int): an epoch according to which the time will be calculated.
+                Possible values: Ntp.EPOCH_1900; Ntp.EPOCH_1970; Ntp.EPOCH_2000
         """
-
+        if epoch is None:
+            epoch = cls.EPOCH_2000
         if new_time is None:
-            new_time = cls.network_time(cls.EPOCH_2000)
+            new_time = cls.network_time(epoch)
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
             raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(ppm))
 
