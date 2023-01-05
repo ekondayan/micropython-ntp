@@ -32,9 +32,7 @@ A robust MicroPython **Time library** for manipulating the **RTC** and and synci
 
 1. Extra precision - take into account the time required to call the functions and compensate for that. This is a rather controversial feature, which may be not be implemented at all.
 
-2. Robust host validation with regular expressions
-
-3. Unit tests
+2. Unit tests
 
 ***!!!At this point all the implemented features are robustly tested and they seem stable enough for production, BUT I do not recommended to use it in a production environment until the API stabilization phase is finished and some unit tests are developed.!!!***
 
@@ -62,11 +60,19 @@ Ntp.set_datetime_callback(_rtc.datetime)
 
 **RTC sync**
 
-For syncing the RTC you have to set a list of hosts first and then run
+For syncing the RTC you have to set a list of hosts first
+
+```python
+Ntp.set_hosts(('0.pool.ntp.org', '1.pool.ntp.org', '2.pool.ntp.org'))
+```
+
+and then run
 
 ```python
 Ntp.rtc_sync()
 ```
+
+The hosts values can be valid hostnames or IP addresses. I the value is neither a valid hostname or IP address, it is skipped WITHOUT an error being thrown. It is your responsibility to pass the correct values.
 
 This function will try to read the time from the hosts list. The first available host will be used to set the time of the RTC in **UTC**. 
 
@@ -81,9 +87,9 @@ Ntp.set_ntp_timeout(timeout_s: int = 1)
 To read the time, a set of functions are available
 
 ```python
-Ntp.time_s(epoch: int = None)
-Ntp.time_ms(epoch: int = None)
-Ntp.time_us(epoch: int = None)
+Ntp.time_s()
+Ntp.time_ms()
+Ntp.time_us()
 ```
 
 The suffix of each function shows how the time will be represented.
@@ -94,19 +100,21 @@ The suffix of each function shows how the time will be represented.
 
 - **_us** - means microseconds
 
-See below, how to use epochs.
-
 **Epochs**
 
-Another nice feature is the ability to calculate the time according to a selected epoch. In micropython the default epoch is `2000-01-01 00:00:00 UTC`. When reading the time, you can pass
+Another nice feature is the ability to calculate the time according to a selected epoch. In micropython the default epoch is `2000-01-01 00:00:00 UTC`. To use an epoch other than the EPOCH_2000, you should call `set_epoch` in the beginning, before you start using the class.
+
+```python
+Ntp.set_epoch(epoch: int = EPOCH_2000):
+```
+
+where `epoch` can be one of:
 
 ```python
 Ntp.EPOCH_1900
 Ntp.EPOCH_1970
 Ntp.EPOCH_2000
 ```
-
-as value to the `epoch` parameter and the returned time will be calculated according to the chosen epoch.
 
 **RTC drift**
 
@@ -138,8 +146,8 @@ Here is a list of all the functions that are managing the drift
 
 ```python
 Ntp.drift_calculate(cls)
-Ntp.drift_last_compensate(epoch: int = None):
-Ntp.drift_last_calculate(epoch: int = None)
+Ntp.drift_last_compensate()
+Ntp.drift_last_calculate()
 Ntp.drift_ppm(cls)
 Ntp.set_drift_ppm(ppm: float)
 Ntp.drift_us(ppm_drift: float = None)
@@ -159,16 +167,65 @@ Ntp.set_timezone(hour: int, minute: int = 0)
 When you get the time with
 
 ```python
-Ntp.time_s(epoch: int = None)
-Ntp.time_ms(epoch: int = None)
-Ntp.time_us(epoch: int = None)
+Ntp.time_s()
+Ntp.time_ms()
+Ntp.time_us()
 ```
 
 the timezone will be calculated automatically.
 
 **Daylight Saving Time**
 
-TODO
+The library supports calculating the time according to the Daylight Saving Time. To start using the DST functionality you have to set three things first:
+
+- DST start date and time
+
+- DST end date and time
+
+- DST bias
+
+These parameters can be set with just one function `set_dst(start: tuple, end: tuple, bias: int)`  for convenience or you can set each parameter separately with a dedicated function. Example:
+
+```python
+# Set DST data in one pass
+# start (tuple): 4-tuple(month, week, weekday, hour) start of DST
+# end (tuple) :4-tuple(month, week, weekday, hour) end of DST
+# bias (int): Daylight Saving Time bias expressed in minutes
+Ntp.set_dst(cls, start: tuple = None, end: tuple = None, bias: int = 0)
+
+# Set the start date and time of the DST
+# month (int): number in range 1(Jan) - 12(Dec)
+# week (int): integer in range 1 - 6. Sometimes there are months when they can spread over a 6 weeks ex. 05.2021
+# weekday (int): integer in range 0(Mon) - 6(Sun)
+# hour (int): integer in range 0 - 23
+Ntp.set_dst_start(month: int, week: int, weekday: int, hour: int)
+
+# Set the end date and time of the DST
+# month (int): number in range 1(Jan) - 12(Dec)
+# week (int): number in range 1 - 6. Sometimes there are months when they can spread over 6 weeks.
+# weekday (int): number in range 0(Mon) - 6(Sun)
+# hour (int): number in range 0 - 23
+Ntp.set_dst_end(cls, month: int, week: int, weekday: int, hour: int)
+
+# Set Daylight Saving Time bias expressed in minutes.
+# bias (int): minutes of the DST bias. Correct values are 30, 60, 90 and 120
+Ntp.set_dst_time_bias(cls, bias: int)
+```
+
+You can disable DST functionality by setting any of the start or end date time to `None`
+
+```python
+# Default values are `None` which disables the DST
+Ntp.set_dst()
+```
+
+To calculate if DST is currently in effect:
+
+```python
+Ntp.dst()
+```
+
+ The function returns 0 if DST not currently in effect or it is disabled. Otherwise the function returns the bias in seconds.
 
 **Logger**
 
@@ -179,6 +236,54 @@ Ntp.set_logger(callback = print)
 ```
 
 The default logger is `print()` and to set it just call the method without any parameters.  To disable logging, set the callback to "None"
+
+# <u>Example</u>
+
+```python
+from machine import RTC
+from ntp import Ntp
+import time
+
+def ntp_log_callback(msg: str):
+    print(msg)
+
+_rtc = RTC()
+
+# Initializing
+Ntp.set_datetime_callback(_rtc.datetime)
+Ntp.set_logger_callback(ntp_log_callback)
+
+# Set a list of valid hostnames/IPs
+Ntp.set_hosts(('0.pool.ntp.org', '1.pool.ntp.org', '2.pool.ntp.org'))
+# Network timeout set to 1 second
+Ntp.set_ntp_timeout(1)
+# Set timezone to 2 hours and 0 minutes
+Ntp.set_timezone(2, 0)
+# If you know the RTC drift in advance, set it manually to -4.6ppm
+Ntp.set_drift_ppm(-4.6)
+# Set epoch to 1970. All time calculations will be according to this epoch
+Ntp.set_epoch(Ntp.EPOCH_1970)
+# Set the DST start and end date time and the bias in one go
+Ntp.set_dst((Ntp.MONTH_MAR, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN, 3),
+            (Ntp.MONTH_OCT, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN, 4),
+            60)
+
+
+# Syncing the RTC with the time from the NTP servers
+Ntp.rtc_sync()
+
+# Let the RTC drift for 1 hour
+time.sleep(1 * 60 * 60)
+
+# Calculate the RTC drift
+Ntp.drift_calculate()
+
+# Let the RTC drift for 3 hours
+time.sleep(3 * 60 * 60)
+
+# Compensate the RTC drift
+Ntp.drift_compensate(Ntp.drift_us())
+```
 
 # <u>Dependencies</u>
 
