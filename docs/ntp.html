@@ -108,7 +108,9 @@ class Ntp:
     # Time bias in seconds
     _dst_bias: int = 0
     # Cache the switch hour calculation
-    _dst_cache_switch_hours = None
+    _dst_cache_switch_hours_start = None
+    _dst_cache_switch_hours_end = None
+    _dst_cache_switch_hours_timestamp = None
 
     # ========================================
     # Preallocate ram to prevent fragmentation
@@ -299,36 +301,24 @@ class Ntp:
         # index  0      1     2      3       4       5       6          7
         dt = cls._datetime()
 
-        # The current month is strictly outside the DST period
-        if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0]:
-            cls._dst_cache_switch_hours = None
+        # Calculates and caches the hours since the beginning of the month when the DST starts/ends
+        if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+            cls._dst_cache_switch_hours_timestamp = dt[0]
+            cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+
+        # Condition 1: The current month is strictly within the DST period
+        # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
+        #              and compares it with the cached value of the hours when DST starts
+        # Condition 3: Current month is the month the DST period ends. Calculates the current hours since the beginning of the month
+        #              and compares it with the cached value of the hours when DST ends
+        # If one of the three conditions is True, the DST is in effect
+        if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0] or \
+                (dt[1] == cls._dst_start[0] and (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours_start) or \
+                (dt[1] == cls._dst_end[0] and (dt[2] * 24 + dt[3]) &lt; cls._dst_cache_switch_hours_end):
             return cls._dst_bias
-        # The current month is strictly within the DST period
-        elif dt[1] &lt; cls._dst_start[0] or cls._dst_end[0] &lt; dt[1]:
-            cls._dst_cache_switch_hours = None
-            return 0
-        # Current month is the month the DST period starts
-        elif dt[1] == cls._dst_start[0]:
-            # BUG: for systems that work for more than a year, if the system work more than one year, the cache value will be invalid
-            # recalculate cache value each year. Another resolution is to disable the cache
-            # Cache the calculation for the switch time
-            if cls._dst_cache_switch_hours is None:
-                # Switch time in hours since the beginning of the month
-                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
 
-            if (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours:
-                return cls._dst_bias
-
-        # Current month is the month the DST period ends
-        elif dt[1] == cls._dst_end[0]:
-            # Cache the calculation for the switch time
-            if cls._dst_cache_switch_hours is None:
-                # Switch time in hours since the beginning of the month
-                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
-
-            if (dt[2] * 24 + dt[3]) &lt; cls._dst_cache_switch_hours:
-                return cls._dst_bias
-
+        # The current month is outside the DST period
         return 0
 
     @classmethod
@@ -414,7 +404,7 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
-    def time(cls, epoch = None, utc: bool = False):
+    def time(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Get a tuple with the date and time in UTC or local timezone + DST.
 
         Args:
@@ -430,7 +420,7 @@ class Ntp:
         return time.localtime(us // 1000_000) + (us % 1000_000,)
 
     @classmethod
-    def time_s(cls, epoch = None, utc: bool = False):
+    def time_s(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in seconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
@@ -446,7 +436,7 @@ class Ntp:
         return cls.time_us(epoch, utc = utc) // 1000_000
 
     @classmethod
-    def time_ms(cls, epoch = None, utc: bool = False):
+    def time_ms(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in milliseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
@@ -462,7 +452,7 @@ class Ntp:
         return cls.time_us(epoch, utc = utc) // 1000
 
     @classmethod
-    def time_us(cls, epoch = None, utc: bool = False):
+    def time_us(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in microseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
@@ -990,7 +980,7 @@ class Ntp:
         return True
 
     @classmethod
-    def _epoch_offset(cls, epoch = None, epoch_list = None):
+    def _epoch_offset(cls, epoch: int = None, epoch_list = None):
         &#34;&#34;&#34; Helper function to select an epoch from a given 3-tuple of epochs
 
         Args:
@@ -1101,7 +1091,9 @@ class Ntp:
     # Time bias in seconds
     _dst_bias: int = 0
     # Cache the switch hour calculation
-    _dst_cache_switch_hours = None
+    _dst_cache_switch_hours_start = None
+    _dst_cache_switch_hours_end = None
+    _dst_cache_switch_hours_timestamp = None
 
     # ========================================
     # Preallocate ram to prevent fragmentation
@@ -1292,36 +1284,24 @@ class Ntp:
         # index  0      1     2      3       4       5       6          7
         dt = cls._datetime()
 
-        # The current month is strictly outside the DST period
-        if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0]:
-            cls._dst_cache_switch_hours = None
+        # Calculates and caches the hours since the beginning of the month when the DST starts/ends
+        if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+            cls._dst_cache_switch_hours_timestamp = dt[0]
+            cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+
+        # Condition 1: The current month is strictly within the DST period
+        # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
+        #              and compares it with the cached value of the hours when DST starts
+        # Condition 3: Current month is the month the DST period ends. Calculates the current hours since the beginning of the month
+        #              and compares it with the cached value of the hours when DST ends
+        # If one of the three conditions is True, the DST is in effect
+        if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0] or \
+                (dt[1] == cls._dst_start[0] and (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours_start) or \
+                (dt[1] == cls._dst_end[0] and (dt[2] * 24 + dt[3]) &lt; cls._dst_cache_switch_hours_end):
             return cls._dst_bias
-        # The current month is strictly within the DST period
-        elif dt[1] &lt; cls._dst_start[0] or cls._dst_end[0] &lt; dt[1]:
-            cls._dst_cache_switch_hours = None
-            return 0
-        # Current month is the month the DST period starts
-        elif dt[1] == cls._dst_start[0]:
-            # BUG: for systems that work for more than a year, if the system work more than one year, the cache value will be invalid
-            # recalculate cache value each year. Another resolution is to disable the cache
-            # Cache the calculation for the switch time
-            if cls._dst_cache_switch_hours is None:
-                # Switch time in hours since the beginning of the month
-                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
 
-            if (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours:
-                return cls._dst_bias
-
-        # Current month is the month the DST period ends
-        elif dt[1] == cls._dst_end[0]:
-            # Cache the calculation for the switch time
-            if cls._dst_cache_switch_hours is None:
-                # Switch time in hours since the beginning of the month
-                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
-
-            if (dt[2] * 24 + dt[3]) &lt; cls._dst_cache_switch_hours:
-                return cls._dst_bias
-
+        # The current month is outside the DST period
         return 0
 
     @classmethod
@@ -1407,7 +1387,7 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
-    def time(cls, epoch = None, utc: bool = False):
+    def time(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Get a tuple with the date and time in UTC or local timezone + DST.
 
         Args:
@@ -1423,7 +1403,7 @@ class Ntp:
         return time.localtime(us // 1000_000) + (us % 1000_000,)
 
     @classmethod
-    def time_s(cls, epoch = None, utc: bool = False):
+    def time_s(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in seconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
@@ -1439,7 +1419,7 @@ class Ntp:
         return cls.time_us(epoch, utc = utc) // 1000_000
 
     @classmethod
-    def time_ms(cls, epoch = None, utc: bool = False):
+    def time_ms(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in milliseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
@@ -1455,7 +1435,7 @@ class Ntp:
         return cls.time_us(epoch, utc = utc) // 1000
 
     @classmethod
-    def time_us(cls, epoch = None, utc: bool = False):
+    def time_us(cls, epoch: int = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in microseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
@@ -1983,7 +1963,7 @@ class Ntp:
         return True
 
     @classmethod
-    def _epoch_offset(cls, epoch = None, epoch_list = None):
+    def _epoch_offset(cls, epoch: int = None, epoch_list = None):
         &#34;&#34;&#34; Helper function to select an epoch from a given 3-tuple of epochs
 
         Args:
@@ -2578,36 +2558,24 @@ def dst(cls):
     # index  0      1     2      3       4       5       6          7
     dt = cls._datetime()
 
-    # The current month is strictly outside the DST period
-    if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0]:
-        cls._dst_cache_switch_hours = None
+    # Calculates and caches the hours since the beginning of the month when the DST starts/ends
+    if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+        cls._dst_cache_switch_hours_timestamp = dt[0]
+        cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+        cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+
+    # Condition 1: The current month is strictly within the DST period
+    # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
+    #              and compares it with the cached value of the hours when DST starts
+    # Condition 3: Current month is the month the DST period ends. Calculates the current hours since the beginning of the month
+    #              and compares it with the cached value of the hours when DST ends
+    # If one of the three conditions is True, the DST is in effect
+    if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0] or \
+            (dt[1] == cls._dst_start[0] and (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours_start) or \
+            (dt[1] == cls._dst_end[0] and (dt[2] * 24 + dt[3]) &lt; cls._dst_cache_switch_hours_end):
         return cls._dst_bias
-    # The current month is strictly within the DST period
-    elif dt[1] &lt; cls._dst_start[0] or cls._dst_end[0] &lt; dt[1]:
-        cls._dst_cache_switch_hours = None
-        return 0
-    # Current month is the month the DST period starts
-    elif dt[1] == cls._dst_start[0]:
-        # BUG: for systems that work for more than a year, if the system work more than one year, the cache value will be invalid
-        # recalculate cache value each year. Another resolution is to disable the cache
-        # Cache the calculation for the switch time
-        if cls._dst_cache_switch_hours is None:
-            # Switch time in hours since the beginning of the month
-            cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
 
-        if (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours:
-            return cls._dst_bias
-
-    # Current month is the month the DST period ends
-    elif dt[1] == cls._dst_end[0]:
-        # Cache the calculation for the switch time
-        if cls._dst_cache_switch_hours is None:
-            # Switch time in hours since the beginning of the month
-            cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
-
-        if (dt[2] * 24 + dt[3]) &lt; cls._dst_cache_switch_hours:
-            return cls._dst_bias
-
+    # The current month is outside the DST period
     return 0</code></pre>
 </details>
 </dd>
@@ -3320,7 +3288,7 @@ def set_timezone(cls, hour: int, minute: int = 0):
 </details>
 </dd>
 <dt id="ntp.Ntp.time"><code class="name flex">
-<span>def <span class="ident">time</span></span>(<span>epoch=None, utc: bool = False)</span>
+<span>def <span class="ident">time</span></span>(<span>epoch: int = None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Get a tuple with the date and time in UTC or local timezone + DST.</p>
@@ -3341,7 +3309,7 @@ def set_timezone(cls, hour: int, minute: int = 0):
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time(cls, epoch = None, utc: bool = False):
+def time(cls, epoch: int = None, utc: bool = False):
     &#34;&#34;&#34; Get a tuple with the date and time in UTC or local timezone + DST.
 
     Args:
@@ -3358,7 +3326,7 @@ def time(cls, epoch = None, utc: bool = False):
 </details>
 </dd>
 <dt id="ntp.Ntp.time_ms"><code class="name flex">
-<span>def <span class="ident">time_ms</span></span>(<span>epoch=None, utc: bool = False)</span>
+<span>def <span class="ident">time_ms</span></span>(<span>epoch: int = None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Return the current time in milliseconds according to the selected
@@ -3381,7 +3349,7 @@ set utc to True.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time_ms(cls, epoch = None, utc: bool = False):
+def time_ms(cls, epoch: int = None, utc: bool = False):
     &#34;&#34;&#34; Return the current time in milliseconds according to the selected
     epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
     set utc to True.
@@ -3398,7 +3366,7 @@ def time_ms(cls, epoch = None, utc: bool = False):
 </details>
 </dd>
 <dt id="ntp.Ntp.time_s"><code class="name flex">
-<span>def <span class="ident">time_s</span></span>(<span>epoch=None, utc: bool = False)</span>
+<span>def <span class="ident">time_s</span></span>(<span>epoch: int = None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Return the current time in seconds according to the selected
@@ -3421,7 +3389,7 @@ set utc to True.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time_s(cls, epoch = None, utc: bool = False):
+def time_s(cls, epoch: int = None, utc: bool = False):
     &#34;&#34;&#34; Return the current time in seconds according to the selected
     epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
     set utc to True.
@@ -3438,7 +3406,7 @@ def time_s(cls, epoch = None, utc: bool = False):
 </details>
 </dd>
 <dt id="ntp.Ntp.time_us"><code class="name flex">
-<span>def <span class="ident">time_us</span></span>(<span>epoch=None, utc: bool = False)</span>
+<span>def <span class="ident">time_us</span></span>(<span>epoch: int = None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Return the current time in microseconds according to the selected
@@ -3461,7 +3429,7 @@ set utc to True.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time_us(cls, epoch = None, utc: bool = False):
+def time_us(cls, epoch: int = None, utc: bool = False):
     &#34;&#34;&#34; Return the current time in microseconds according to the selected
     epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
     set utc to True.

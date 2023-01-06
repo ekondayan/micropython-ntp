@@ -80,7 +80,9 @@ class Ntp:
     # Time bias in seconds
     _dst_bias: int = 0
     # Cache the switch hour calculation
-    _dst_cache_switch_hours = None
+    _dst_cache_switch_hours_start = None
+    _dst_cache_switch_hours_end = None
+    _dst_cache_switch_hours_timestamp = None
 
     # ========================================
     # Preallocate ram to prevent fragmentation
@@ -271,34 +273,24 @@ class Ntp:
         # index  0      1     2      3       4       5       6          7
         dt = cls._datetime()
 
-        # The current month is strictly outside the DST period
-        if cls._dst_start[0] < dt[1] < cls._dst_end[0]:
-            cls._dst_cache_switch_hours = None
+        # Calculates and caches the hours since the beginning of the month when the DST starts/ends
+        if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+            cls._dst_cache_switch_hours_timestamp = dt[0]
+            cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+
+        # Condition 1: The current month is strictly within the DST period
+        # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
+        #              and compares it with the cached value of the hours when DST starts
+        # Condition 3: Current month is the month the DST period ends. Calculates the current hours since the beginning of the month
+        #              and compares it with the cached value of the hours when DST ends
+        # If one of the three conditions is True, the DST is in effect
+        if cls._dst_start[0] < dt[1] < cls._dst_end[0] or \
+                (dt[1] == cls._dst_start[0] and (dt[2] * 24 + dt[3]) >= cls._dst_cache_switch_hours_start) or \
+                (dt[1] == cls._dst_end[0] and (dt[2] * 24 + dt[3]) < cls._dst_cache_switch_hours_end):
             return cls._dst_bias
-        # The current month is strictly within the DST period
-        elif dt[1] < cls._dst_start[0] or cls._dst_end[0] < dt[1]:
-            cls._dst_cache_switch_hours = None
-            return 0
-        # Current month is the month the DST period starts
-        elif dt[1] == cls._dst_start[0]:
-            # Cache the calculation for the switch time
-            if cls._dst_cache_switch_hours is None:
-                # Switch time in hours since the beginning of the month
-                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
 
-            if (dt[2] * 24 + dt[3]) >= cls._dst_cache_switch_hours:
-                return cls._dst_bias
-
-        # Current month is the month the DST period ends
-        elif dt[1] == cls._dst_end[0]:
-            # Cache the calculation for the switch time
-            if cls._dst_cache_switch_hours is None:
-                # Switch time in hours since the beginning of the month
-                cls._dst_cache_switch_hours = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
-
-            if (dt[2] * 24 + dt[3]) < cls._dst_cache_switch_hours:
-                return cls._dst_bias
-
+        # The current month is outside the DST period
         return 0
 
     @classmethod
