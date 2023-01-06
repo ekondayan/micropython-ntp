@@ -154,7 +154,7 @@ class Ntp:
 
     @classmethod
     def set_epoch(cls, epoch: int = EPOCH_2000):
-        &#34;&#34;&#34; Set the epoch. It is recommended to set the epoch before you start using class. If you do not set the epoch,
+        &#34;&#34;&#34; Set the epoch. It is recommended to set the epoch before you start using the class. If you do not set the epoch,
         the default Ntp.EPOCH_2000 will be used.
 
         Args:
@@ -299,13 +299,18 @@ class Ntp:
         # index  0      1     2      3       4       5       6          7
         dt = cls._datetime()
 
+        # The current month is strictly outside the DST period
         if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0]:
             cls._dst_cache_switch_hours = None
             return cls._dst_bias
+        # The current month is strictly within the DST period
         elif dt[1] &lt; cls._dst_start[0] or cls._dst_end[0] &lt; dt[1]:
             cls._dst_cache_switch_hours = None
             return 0
+        # Current month is the month the DST period starts
         elif dt[1] == cls._dst_start[0]:
+            # BUG: for systems that work for more than a year, if the system work more than one year, the cache value will be invalid
+            # recalculate cache value each year. Another resolution is to disable the cache
             # Cache the calculation for the switch time
             if cls._dst_cache_switch_hours is None:
                 # Switch time in hours since the beginning of the month
@@ -314,6 +319,7 @@ class Ntp:
             if (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours:
                 return cls._dst_bias
 
+        # Current month is the month the DST period ends
         elif dt[1] == cls._dst_end[0]:
             # Cache the calculation for the switch time
             if cls._dst_cache_switch_hours is None:
@@ -408,64 +414,68 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
-    def time(cls, utc: bool = False):
+    def time(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Get a tuple with the date and time in UTC or local timezone + DST.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             tuple: 9-tuple(year, month, day, hour, minute, second, weekday, yearday, us)
         &#34;&#34;&#34;
 
-        us = cls.time_us(utc = utc)
+        us = cls.time_us(epoch, utc = utc)
         # (year, month, day, hour, minute, second, weekday, yearday) + (us,)
         return time.localtime(us // 1000_000) + (us % 1000_000,)
 
     @classmethod
-    def time_s(cls, utc: bool = False):
+    def time_s(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in seconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: the time in seconds since the selected epoch
         &#34;&#34;&#34;
 
-        return cls.time_us(utc = utc) // 1000_000
+        return cls.time_us(epoch, utc = utc) // 1000_000
 
     @classmethod
-    def time_ms(cls, utc: bool = False):
+    def time_ms(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in milliseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: the time in milliseconds since the selected epoch
         &#34;&#34;&#34;
 
-        return cls.time_us(utc = utc) // 1000
+        return cls.time_us(epoch, utc = utc) // 1000
 
     @classmethod
-    def time_us(cls, utc: bool = False):
+    def time_us(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in microseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: integer the time in microseconds since the selected epoch
         &#34;&#34;&#34;
 
-        epoch_offset = cls._epoch_offset(cls._epoch)
+        epoch_offset = cls._epoch_offset(cls._epoch if epoch is None else epoch)
 
         # Do not take the value when on the verge of the next second
         # This is required to ensure that the sec and usec will be read within the boundaries of one second
@@ -473,6 +483,7 @@ class Ntp:
         if us &gt;= 995000:
             time.sleep_us(100_000 - us)
 
+        # Daylight Saving Time (DST) is not used for UTC as it is a time standard for all time zones.
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
         dt = cls._datetime()
         return (time.mktime((dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], 0, 0, 0)) + epoch_offset + timezone_and_dst) * 1000_000 + dt[7]
@@ -1136,7 +1147,7 @@ class Ntp:
 
     @classmethod
     def set_epoch(cls, epoch: int = EPOCH_2000):
-        &#34;&#34;&#34; Set the epoch. It is recommended to set the epoch before you start using class. If you do not set the epoch,
+        &#34;&#34;&#34; Set the epoch. It is recommended to set the epoch before you start using the class. If you do not set the epoch,
         the default Ntp.EPOCH_2000 will be used.
 
         Args:
@@ -1281,13 +1292,18 @@ class Ntp:
         # index  0      1     2      3       4       5       6          7
         dt = cls._datetime()
 
+        # The current month is strictly outside the DST period
         if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0]:
             cls._dst_cache_switch_hours = None
             return cls._dst_bias
+        # The current month is strictly within the DST period
         elif dt[1] &lt; cls._dst_start[0] or cls._dst_end[0] &lt; dt[1]:
             cls._dst_cache_switch_hours = None
             return 0
+        # Current month is the month the DST period starts
         elif dt[1] == cls._dst_start[0]:
+            # BUG: for systems that work for more than a year, if the system work more than one year, the cache value will be invalid
+            # recalculate cache value each year. Another resolution is to disable the cache
             # Cache the calculation for the switch time
             if cls._dst_cache_switch_hours is None:
                 # Switch time in hours since the beginning of the month
@@ -1296,6 +1312,7 @@ class Ntp:
             if (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours:
                 return cls._dst_bias
 
+        # Current month is the month the DST period ends
         elif dt[1] == cls._dst_end[0]:
             # Cache the calculation for the switch time
             if cls._dst_cache_switch_hours is None:
@@ -1390,64 +1407,68 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
-    def time(cls, utc: bool = False):
+    def time(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Get a tuple with the date and time in UTC or local timezone + DST.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             tuple: 9-tuple(year, month, day, hour, minute, second, weekday, yearday, us)
         &#34;&#34;&#34;
 
-        us = cls.time_us(utc = utc)
+        us = cls.time_us(epoch, utc = utc)
         # (year, month, day, hour, minute, second, weekday, yearday) + (us,)
         return time.localtime(us // 1000_000) + (us % 1000_000,)
 
     @classmethod
-    def time_s(cls, utc: bool = False):
+    def time_s(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in seconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: the time in seconds since the selected epoch
         &#34;&#34;&#34;
 
-        return cls.time_us(utc = utc) // 1000_000
+        return cls.time_us(epoch, utc = utc) // 1000_000
 
     @classmethod
-    def time_ms(cls, utc: bool = False):
+    def time_ms(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in milliseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: the time in milliseconds since the selected epoch
         &#34;&#34;&#34;
 
-        return cls.time_us(utc = utc) // 1000
+        return cls.time_us(epoch, utc = utc) // 1000
 
     @classmethod
-    def time_us(cls, utc: bool = False):
+    def time_us(cls, epoch = None, utc: bool = False):
         &#34;&#34;&#34; Return the current time in microseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: integer the time in microseconds since the selected epoch
         &#34;&#34;&#34;
 
-        epoch_offset = cls._epoch_offset(cls._epoch)
+        epoch_offset = cls._epoch_offset(cls._epoch if epoch is None else epoch)
 
         # Do not take the value when on the verge of the next second
         # This is required to ensure that the sec and usec will be read within the boundaries of one second
@@ -1455,6 +1476,7 @@ class Ntp:
         if us &gt;= 995000:
             time.sleep_us(100_000 - us)
 
+        # Daylight Saving Time (DST) is not used for UTC as it is a time standard for all time zones.
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
         dt = cls._datetime()
         return (time.mktime((dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], 0, 0, 0)) + epoch_offset + timezone_and_dst) * 1000_000 + dt[7]
@@ -2556,13 +2578,18 @@ def dst(cls):
     # index  0      1     2      3       4       5       6          7
     dt = cls._datetime()
 
+    # The current month is strictly outside the DST period
     if cls._dst_start[0] &lt; dt[1] &lt; cls._dst_end[0]:
         cls._dst_cache_switch_hours = None
         return cls._dst_bias
+    # The current month is strictly within the DST period
     elif dt[1] &lt; cls._dst_start[0] or cls._dst_end[0] &lt; dt[1]:
         cls._dst_cache_switch_hours = None
         return 0
+    # Current month is the month the DST period starts
     elif dt[1] == cls._dst_start[0]:
+        # BUG: for systems that work for more than a year, if the system work more than one year, the cache value will be invalid
+        # recalculate cache value each year. Another resolution is to disable the cache
         # Cache the calculation for the switch time
         if cls._dst_cache_switch_hours is None:
             # Switch time in hours since the beginning of the month
@@ -2571,6 +2598,7 @@ def dst(cls):
         if (dt[2] * 24 + dt[3]) &gt;= cls._dst_cache_switch_hours:
             return cls._dst_bias
 
+    # Current month is the month the DST period ends
     elif dt[1] == cls._dst_end[0]:
         # Cache the calculation for the switch time
         if cls._dst_cache_switch_hours is None:
@@ -3131,7 +3159,7 @@ def set_dst_time_bias(cls, bias: int):
 <span>def <span class="ident">set_epoch</span></span>(<span>epoch: int = 2)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Set the epoch. It is recommended to set the epoch before you start using class. If you do not set the epoch,
+<div class="desc"><p>Set the epoch. It is recommended to set the epoch before you start using the class. If you do not set the epoch,
 the default Ntp.EPOCH_2000 will be used.</p>
 <h2 id="args">Args</h2>
 <dl>
@@ -3145,7 +3173,7 @@ the default Ntp.EPOCH_2000 will be used.</p>
 </summary>
 <pre><code class="python">@classmethod
 def set_epoch(cls, epoch: int = EPOCH_2000):
-    &#34;&#34;&#34; Set the epoch. It is recommended to set the epoch before you start using class. If you do not set the epoch,
+    &#34;&#34;&#34; Set the epoch. It is recommended to set the epoch before you start using the class. If you do not set the epoch,
     the default Ntp.EPOCH_2000 will be used.
 
     Args:
@@ -3292,7 +3320,7 @@ def set_timezone(cls, hour: int, minute: int = 0):
 </details>
 </dd>
 <dt id="ntp.Ntp.time"><code class="name flex">
-<span>def <span class="ident">time</span></span>(<span>utc: bool = False)</span>
+<span>def <span class="ident">time</span></span>(<span>epoch=None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Get a tuple with the date and time in UTC or local timezone + DST.</p>
@@ -3300,6 +3328,8 @@ def set_timezone(cls, hour: int, minute: int = 0):
 <dl>
 <dt><strong><code>utc</code></strong> :&ensp;<code>bool</code></dt>
 <dd>the returned time will be according to UTC time</dd>
+<dt><strong><code>epoch</code></strong> :&ensp;<code>int</code></dt>
+<dd>an epoch according to which the time will be calculated.</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -3311,23 +3341,24 @@ def set_timezone(cls, hour: int, minute: int = 0):
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time(cls, utc: bool = False):
+def time(cls, epoch = None, utc: bool = False):
     &#34;&#34;&#34; Get a tuple with the date and time in UTC or local timezone + DST.
 
     Args:
         utc (bool): the returned time will be according to UTC time
+        epoch (int): an epoch according to which the time will be calculated.
 
     Returns:
         tuple: 9-tuple(year, month, day, hour, minute, second, weekday, yearday, us)
     &#34;&#34;&#34;
 
-    us = cls.time_us(utc = utc)
+    us = cls.time_us(epoch, utc = utc)
     # (year, month, day, hour, minute, second, weekday, yearday) + (us,)
     return time.localtime(us // 1000_000) + (us % 1000_000,)</code></pre>
 </details>
 </dd>
 <dt id="ntp.Ntp.time_ms"><code class="name flex">
-<span>def <span class="ident">time_ms</span></span>(<span>utc: bool = False)</span>
+<span>def <span class="ident">time_ms</span></span>(<span>epoch=None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Return the current time in milliseconds according to the selected
@@ -3337,6 +3368,8 @@ set utc to True.</p>
 <dl>
 <dt><strong><code>utc</code></strong> :&ensp;<code>bool</code></dt>
 <dd>the returned time will be according to UTC time</dd>
+<dt><strong><code>epoch</code></strong> :&ensp;<code>int</code></dt>
+<dd>an epoch according to which the time will be calculated.</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -3348,23 +3381,24 @@ set utc to True.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time_ms(cls, utc: bool = False):
+def time_ms(cls, epoch = None, utc: bool = False):
     &#34;&#34;&#34; Return the current time in milliseconds according to the selected
     epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
     set utc to True.
 
     Args:
         utc (bool): the returned time will be according to UTC time
+        epoch (int): an epoch according to which the time will be calculated.
 
     Returns:
         int: the time in milliseconds since the selected epoch
     &#34;&#34;&#34;
 
-    return cls.time_us(utc = utc) // 1000</code></pre>
+    return cls.time_us(epoch, utc = utc) // 1000</code></pre>
 </details>
 </dd>
 <dt id="ntp.Ntp.time_s"><code class="name flex">
-<span>def <span class="ident">time_s</span></span>(<span>utc: bool = False)</span>
+<span>def <span class="ident">time_s</span></span>(<span>epoch=None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Return the current time in seconds according to the selected
@@ -3374,6 +3408,8 @@ set utc to True.</p>
 <dl>
 <dt><strong><code>utc</code></strong> :&ensp;<code>bool</code></dt>
 <dd>the returned time will be according to UTC time</dd>
+<dt><strong><code>epoch</code></strong> :&ensp;<code>int</code></dt>
+<dd>an epoch according to which the time will be calculated.</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -3385,23 +3421,24 @@ set utc to True.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time_s(cls, utc: bool = False):
+def time_s(cls, epoch = None, utc: bool = False):
     &#34;&#34;&#34; Return the current time in seconds according to the selected
     epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
     set utc to True.
 
     Args:
         utc (bool): the returned time will be according to UTC time
+        epoch (int): an epoch according to which the time will be calculated.
 
     Returns:
         int: the time in seconds since the selected epoch
     &#34;&#34;&#34;
 
-    return cls.time_us(utc = utc) // 1000_000</code></pre>
+    return cls.time_us(epoch, utc = utc) // 1000_000</code></pre>
 </details>
 </dd>
 <dt id="ntp.Ntp.time_us"><code class="name flex">
-<span>def <span class="ident">time_us</span></span>(<span>utc: bool = False)</span>
+<span>def <span class="ident">time_us</span></span>(<span>epoch=None, utc: bool = False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Return the current time in microseconds according to the selected
@@ -3411,6 +3448,8 @@ set utc to True.</p>
 <dl>
 <dt><strong><code>utc</code></strong> :&ensp;<code>bool</code></dt>
 <dd>the returned time will be according to UTC time</dd>
+<dt><strong><code>epoch</code></strong> :&ensp;<code>int</code></dt>
+<dd>an epoch according to which the time will be calculated.</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -3422,19 +3461,20 @@ set utc to True.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
-def time_us(cls, utc: bool = False):
+def time_us(cls, epoch = None, utc: bool = False):
     &#34;&#34;&#34; Return the current time in microseconds according to the selected
     epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
     set utc to True.
 
     Args:
         utc (bool): the returned time will be according to UTC time
+        epoch (int): an epoch according to which the time will be calculated.
 
     Returns:
         int: integer the time in microseconds since the selected epoch
     &#34;&#34;&#34;
 
-    epoch_offset = cls._epoch_offset(cls._epoch)
+    epoch_offset = cls._epoch_offset(cls._epoch if epoch is None else epoch)
 
     # Do not take the value when on the verge of the next second
     # This is required to ensure that the sec and usec will be read within the boundaries of one second
@@ -3442,6 +3482,7 @@ def time_us(cls, utc: bool = False):
     if us &gt;= 995000:
         time.sleep_us(100_000 - us)
 
+    # Daylight Saving Time (DST) is not used for UTC as it is a time standard for all time zones.
     timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
     dt = cls._datetime()
     return (time.mktime((dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], 0, 0, 0)) + epoch_offset + timezone_and_dst) * 1000_000 + dt[7]</code></pre>

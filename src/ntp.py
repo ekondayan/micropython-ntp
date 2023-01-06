@@ -126,7 +126,7 @@ class Ntp:
 
     @classmethod
     def set_epoch(cls, epoch: int = EPOCH_2000):
-        """ Set the epoch. It is recommended to set the epoch before you start using class. If you do not set the epoch,
+        """ Set the epoch. It is recommended to set the epoch before you start using the class. If you do not set the epoch,
         the default Ntp.EPOCH_2000 will be used.
 
         Args:
@@ -271,12 +271,15 @@ class Ntp:
         # index  0      1     2      3       4       5       6          7
         dt = cls._datetime()
 
+        # The current month is strictly outside the DST period
         if cls._dst_start[0] < dt[1] < cls._dst_end[0]:
             cls._dst_cache_switch_hours = None
             return cls._dst_bias
+        # The current month is strictly within the DST period
         elif dt[1] < cls._dst_start[0] or cls._dst_end[0] < dt[1]:
             cls._dst_cache_switch_hours = None
             return 0
+        # Current month is the month the DST period starts
         elif dt[1] == cls._dst_start[0]:
             # Cache the calculation for the switch time
             if cls._dst_cache_switch_hours is None:
@@ -286,6 +289,7 @@ class Ntp:
             if (dt[2] * 24 + dt[3]) >= cls._dst_cache_switch_hours:
                 return cls._dst_bias
 
+        # Current month is the month the DST period ends
         elif dt[1] == cls._dst_end[0]:
             # Cache the calculation for the switch time
             if cls._dst_cache_switch_hours is None:
@@ -380,64 +384,68 @@ class Ntp:
         cls._timezone = hour * 3600 + minute * 60
 
     @classmethod
-    def time(cls, utc: bool = False):
+    def time(cls, epoch: int = None, utc: bool = False):
         """ Get a tuple with the date and time in UTC or local timezone + DST.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             tuple: 9-tuple(year, month, day, hour, minute, second, weekday, yearday, us)
         """
 
-        us = cls.time_us(utc = utc)
+        us = cls.time_us(epoch, utc = utc)
         # (year, month, day, hour, minute, second, weekday, yearday) + (us,)
         return time.localtime(us // 1000_000) + (us % 1000_000,)
 
     @classmethod
-    def time_s(cls, utc: bool = False):
+    def time_s(cls, epoch: int = None, utc: bool = False):
         """ Return the current time in seconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: the time in seconds since the selected epoch
         """
 
-        return cls.time_us(utc = utc) // 1000_000
+        return cls.time_us(epoch, utc = utc) // 1000_000
 
     @classmethod
-    def time_ms(cls, utc: bool = False):
+    def time_ms(cls, epoch: int = None, utc: bool = False):
         """ Return the current time in milliseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: the time in milliseconds since the selected epoch
         """
 
-        return cls.time_us(utc = utc) // 1000
+        return cls.time_us(epoch, utc = utc) // 1000
 
     @classmethod
-    def time_us(cls, utc: bool = False):
+    def time_us(cls, epoch: int = None, utc: bool = False):
         """ Return the current time in microseconds according to the selected
         epoch, timezone and Daylight Saving Time. To skip the timezone and DST calculation
         set utc to True.
 
         Args:
             utc (bool): the returned time will be according to UTC time
+            epoch (int): an epoch according to which the time will be calculated.
 
         Returns:
             int: integer the time in microseconds since the selected epoch
         """
 
-        epoch_offset = cls._epoch_offset(cls._epoch)
+        epoch_offset = cls._epoch_offset(cls._epoch if epoch is None else epoch)
 
         # Do not take the value when on the verge of the next second
         # This is required to ensure that the sec and usec will be read within the boundaries of one second
@@ -445,6 +453,7 @@ class Ntp:
         if us >= 995000:
             time.sleep_us(100_000 - us)
 
+        # Daylight Saving Time (DST) is not used for UTC as it is a time standard for all time zones.
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
         dt = cls._datetime()
         return (time.mktime((dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], 0, 0, 0)) + epoch_offset + timezone_and_dst) * 1000_000 + dt[7]
@@ -951,7 +960,7 @@ class Ntp:
         return True
 
     @classmethod
-    def _epoch_offset(cls, epoch = None, epoch_list = None):
+    def _epoch_offset(cls, epoch: int = None, epoch_list = None):
         """ Helper function to select an epoch from a given 3-tuple of epochs
 
         Args:

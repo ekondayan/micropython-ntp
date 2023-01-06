@@ -87,22 +87,34 @@ Ntp.set_ntp_timeout(timeout_s: int = 1)
 To read the time, a set of functions are available
 
 ```python
-Ntp.time_s()
-Ntp.time_ms()
-Ntp.time_us()
+Ntp.time_s(epoch: int = None, utc: bool = False)
+Ntp.time_ms(epoch: int = None, utc: bool = False)
+Ntp.time_us(epoch: int = None, utc: bool = False)
 ```
 
 The suffix of each function shows how the time will be represented.
 
-- **_s** - means seconds
+- **_s** suffix - means seconds
 
-- **_ms** - means milliseconds
+- **_ms** suffix - means milliseconds
 
-- **_us** - means microseconds
+- **_us** suffix - means microseconds
+
+If you want to get the time relative to an epoch, you can pass one of the following constants:
+
+```python
+EPOCH_1900
+EPOCH_1970
+EPOCH_2000
+```
+
+If epoch parameter is None, the default epoch will be used. 
+
+To get a UTC time, just set `utc = True`. The UTC time excludes the Daylight Saving Time and the Timezone offsets.
 
 **Epochs**
 
-Another nice feature is the ability to calculate the time according to a selected epoch. In micropython the default epoch is `2000-01-01 00:00:00 UTC`. To use an epoch other than the EPOCH_2000, you should call `set_epoch` in the beginning, before you start using the class.
+Another nice feature is the ability to calculate the time relative to a selected epoch. In micropython the default epoch is `2000-01-01 00:00:00 UTC`. To use an epoch other than the EPOCH_2000, you should call `set_epoch` in the beginning, before you start using the class.
 
 ```python
 Ntp.set_epoch(epoch: int = EPOCH_2000):
@@ -172,7 +184,7 @@ Ntp.time_ms()
 Ntp.time_us()
 ```
 
-the timezone will be calculated automatically.
+the timezone and DST will be calculated automatically.
 
 **Daylight Saving Time**
 
