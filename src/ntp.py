@@ -448,7 +448,7 @@ class Ntp:
         # Daylight Saving Time (DST) is not used for UTC as it is a time standard for all time zones.
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
         dt = cls._datetime()
-        return (time.mktime((dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], 0, 0, 0)) + epoch_offset + timezone_and_dst) * 1000_000 + dt[7]
+        return (time.mktime((dt[0], dt[1], dt[2], dt[4], dt[5], dt[6], 0, 0, 0)) + epoch_offset + timezone_and_dst) * 1000_000 + dt[7]
 
     @classmethod
     def network_time(cls):
