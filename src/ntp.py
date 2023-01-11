@@ -428,7 +428,7 @@ class Ntp:
             int: the time in seconds since the selected epoch
         """
 
-        return cls.time_us(epoch, utc = utc) // 1000_000
+        return cls.time_us(epoch = epoch, utc = utc) // 1000_000
 
     @classmethod
     def time_ms(cls, epoch: int = None, utc: bool = False):
@@ -445,7 +445,7 @@ class Ntp:
             int: the time in milliseconds since the selected epoch
         """
 
-        return cls.time_us(epoch, utc = utc) // 1000
+        return cls.time_us(epoch = epoch, utc = utc) // 1000
 
     @classmethod
     def time_us(cls, epoch: int = None, utc: bool = False):
@@ -711,7 +711,7 @@ class Ntp:
         if not isinstance(ppm_drift, (float, int)):
             raise ValueError('Invalid parameter: ppm_drift={} must be float or int'.format(ppm_drift))
 
-        delta_time_rtc = cls.time_us(utc = True) - max(cls._rtc_last_sync, cls._drift_last_compensate)
+        delta_time_rtc = cls.time_us(epoch = cls.device_epoch(), utc = True) - max(cls._rtc_last_sync, cls._drift_last_compensate)
         delta_time_real = int((1000_000 * delta_time_rtc) // (1000_000 + ppm_drift))
 
         return delta_time_rtc - delta_time_real
