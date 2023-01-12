@@ -406,6 +406,15 @@ class Ntp:
 
         Returns:
             tuple: 9-tuple(year, month, day, hour, minute, second, weekday, yearday, us)
+                * year is the year including the century part
+                * month is in (Ntp.MONTH_JAN ... Ntp.MONTH_DEC)
+                * day is in (1 ... 31)
+                * hour is in (0 ... 23)
+                * minutes is in (0 ... 59)
+                * seconds is in (0 ... 59)
+                * weekday is in (Ntp.WEEKDAY_MON ... Ntp.WEEKDAY_SUN)
+                * yearday is in (1 ... 366)
+                * us is in (0 ... 999999)
         """
 
         # localtime() uses the device's epoch
@@ -484,7 +493,7 @@ class Ntp:
                 Possible values: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None
 
         Returns:
-            tuple: 2-tuple(ntp time, timestamp). First position contains the accurate time(UTC) from the NTP
+            tuple: 2-tuple(ntp_time, timestamp). First position contains the accurate time(UTC) from the NTP
                 server in nanoseconds since the selected epoch. The second position in the tuple is a timestamp in microseconds taken at the time the
                 request to the server was sent. This timestamp can be used later to compensate for the time difference between the request was sent
                 and the later moment the time is used. The timestamp is the output of time.ticks_us()
@@ -515,12 +524,12 @@ class Ntp:
                     s.close()
 
             sec, nano = struct.unpack('!II', cls.__ntp_msg[40:48])
-            epoch_offset = cls._epoch_offset(from_epoch = cls.EPOCH_1900, to_epoch = epoch)
-            if sec < abs(epoch_offset):
+            # Ensure a basic validity check of the packet
+            if sec < cls._epoch_offset(from_epoch = cls.EPOCH_1900, to_epoch = cls.EPOCH_2000):
                 cls._log('(NTP) Invalid packet: Host({})'.format(host))
                 continue
 
-            sec = sec + epoch_offset
+            sec = sec + cls._epoch_offset(from_epoch = cls.EPOCH_1900, to_epoch = epoch)
             micro = (nano * 1000_000) >> 32
             return sec * 1000_000 + micro, timestamp
 
@@ -593,7 +602,7 @@ class Ntp:
             new_time (tuple): None or 2-tuple(time, timestamp). If None, the RTC will be synchronized
                 from the NTP server. If 2-tuple is passed, the RTC will be compensated with the given value.
                 The 2-tuple format is (time, timestamp), where:
-                    * time = the micro second time in UTC since 00:00:00 of the selected epoch
+                    * time = the micro second time in UTC relative to the device's epoch
                     * timestamp = micro second timestamp in CPU ticks at the moment the time was sampled.
                         Example:
                             from time import ticks_us
