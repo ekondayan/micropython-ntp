@@ -163,7 +163,7 @@ Ntp.time(utc: bool = False) -> tuple
 To read the time directly from the NTP:
 
 ```python
-Ntp.network_time(epoch: int = None) -> tuple
+Ntp.ntp_time(epoch: int = None) -> tuple
 # 2-tuple(ntp_time, timestamp)
 # * ntp_time contains the accurate time(UTC) from the NTP server
 #    in nanoseconds since the selected epoch. 
@@ -200,6 +200,14 @@ Ntp.device_epoch()
 ```
 
 The `'time()` function does not have an epoch parameter, because it returns a structured tuple.
+
+A helper function that is available for calculating the delta between two epochs:
+
+```python
+epoch_delta(from_epoch: int, to_epoch: int) -> int
+```
+
+If you want to convert a timestamp from an earlier epoch to a latter,  you will have to subtract the seconds between the two epochs. If you want to convert a timestamp from a latter epoch to an earlier,  you will have to add the seconds between the two epochs. The function takes that into account and returns a positive or negative value.
 
 **RTC drift**
 

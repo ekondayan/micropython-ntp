@@ -24,9 +24,9 @@ except ImportError:
     def const(v):
         return v
 
-_NTP_DELTA_1900_1970 = const(2208988800)  # Seconds between 1900 and 1970
-_NTP_DELTA_1900_2000 = const(3155673600)  # Seconds between 1900 and 2000
-_NTP_DELTA_1970_2000 = const(946684800)  # Seconds between 1970 and 2000 = _NTP_DELTA_1900_2000 - _NTP_DELTA_1900_1970
+_EPOCH_DELTA_1900_1970 = const(2208988800)  # Seconds between 1900 and 1970
+_EPOCH_DELTA_1900_2000 = const(3155673600)  # Seconds between 1900 and 2000
+_EPOCH_DELTA_1970_2000 = const(946684800)  # Seconds between 1970 and 2000 = _EPOCH_DELTA_1900_2000 - _EPOCH_DELTA_1900_1970
 
 
 class Ntp:
@@ -89,9 +89,9 @@ class Ntp:
     __days = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
     __ntp_msg = bytearray(48)
     # Lookup Table for fast access. Row = from_epoch Column = to_epoch
-    __epoch_offset_lut = ((0, -_NTP_DELTA_1900_1970, -_NTP_DELTA_1900_2000),
-                          (_NTP_DELTA_1900_1970, 0, -_NTP_DELTA_1970_2000),
-                          (_NTP_DELTA_1900_2000, _NTP_DELTA_1970_2000, 0))
+    __epoch_delta_lut = ((0, -_EPOCH_DELTA_1900_1970, -_EPOCH_DELTA_1900_2000),
+                         (_EPOCH_DELTA_1900_1970, 0, -_EPOCH_DELTA_1970_2000),
+                         (_EPOCH_DELTA_1900_2000, _EPOCH_DELTA_1970_2000, 0))
 
     @classmethod
     def set_datetime_callback(cls, callback):
@@ -417,10 +417,10 @@ class Ntp:
                 * us is in (0 ... 999999)
         """
 
-        # localtime() uses the device's epoch
+        # gmtime() uses the device's epoch
         us = cls.time_us(cls.device_epoch(), utc = utc)
         # (year, month, day, hour, minute, second, weekday, yearday) + (us,)
-        return time.localtime(us // 1000_000) + (us % 1000_000,)
+        return time.gmtime(us // 1000_000) + (us % 1000_000,)
 
     @classmethod
     def time_s(cls, epoch: int = None, utc: bool = False):
@@ -475,15 +475,15 @@ class Ntp:
         # index  0      1     2      3       4      5       6        7
         dt = cls._datetime()
 
-        epoch_offset = cls._epoch_offset(cls.device_epoch(), epoch)
+        epoch_delta = cls.epoch_delta(cls.device_epoch(), epoch)
 
         # Daylight Saving Time (DST) is not used for UTC as it is a time standard for all time zones.
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst(dt))
         # mktime() uses the device's epoch
-        return (time.mktime((dt[0], dt[1], dt[2], dt[4], dt[5], dt[6], 0, 0, 0)) + epoch_offset + timezone_and_dst) * 1000_000 + dt[7]
+        return (time.mktime((dt[0], dt[1], dt[2], dt[4], dt[5], dt[6], 0, 0, 0)) + epoch_delta + timezone_and_dst) * 1000_000 + dt[7]
 
     @classmethod
-    def network_time(cls, epoch: int = None):
+    def ntp_time(cls, epoch: int = None):
         """ Get the accurate time from the first valid NTP server in the list with microsecond precision. When the server
         does not respond within the timeout period, the next server in the list is used. The default timeout is 1 sec.
         The timeout can be changed with `set_ntp_timeout()`. When none of the servers respond, throw an Exception.
@@ -523,15 +523,34 @@ class Ntp:
                 if s is not None:
                     s.close()
 
-            sec, nano = struct.unpack('!II', cls.__ntp_msg[40:48])
-            # Ensure a basic validity check of the packet
-            if sec < cls._epoch_offset(from_epoch = cls.EPOCH_1900, to_epoch = cls.EPOCH_2000):
+            # Mode: The mode field of the NTP packet is an 8-bit field that specifies the mode of the packet.
+            # A value of 4 indicates a server response, so if the mode value is not 4, the packet is invalid.
+            if (cls.__ntp_msg[0] & 0b00000111) != 4:
+                cls._log('(NTP) Invalid packet due to bad "mode" field value: Host({})'.format(host))
+                continue
+
+            # Leap Indicator: The leap indicator field of the NTP packet is a 2-bit field that indicates the status of the server's clock.
+            # A value of 0 or 1 indicates a normal or unsynchronized clock, so if the leap indicator field is set to any other value, the packet is invalid.
+            if ((cls.__ntp_msg[0] >> 6) & 0b00000011) > 2:
+                cls._log('(NTP) Invalid packet due to bad "leap" field value: Host({})'.format(host))
+                continue
+
+            # Stratum: The stratum field of the NTP packet is an 8-bit field that indicates the stratum level of the server.
+            # A value outside the range 1 to 15 indicates an invalid packet.
+            if not (1 <= (cls.__ntp_msg[1] & 0b00000011) <= 15):
+                cls._log('(NTP) Invalid packet due to bad "stratum" field value: Host({})'.format(host))
+                continue
+
+            sec, fraction = struct.unpack('!II', cls.__ntp_msg[40:48])
+            # Transmit Timestamp: The Transmit Timestamp field of the NTP packet is a 64-bit field that contains the server's time when the packet was sent.
+            # If this field is set to zero, it may indicate that the packet is invalid.
+            if sec == 0:
                 cls._log('(NTP) Invalid packet: Host({})'.format(host))
                 continue
 
-            sec = sec + cls._epoch_offset(from_epoch = cls.EPOCH_1900, to_epoch = epoch)
-            micro = (nano * 1000_000) >> 32
-            return sec * 1000_000 + micro, timestamp
+            sec = sec + cls.epoch_delta(from_epoch = cls.EPOCH_1900, to_epoch = epoch)
+            micro = (fraction * 1_000_000) >> 32
+            return sec * 1_000_000 + micro, timestamp
 
         raise RuntimeError('Can not connect to any of the NTP servers')
 
@@ -550,13 +569,13 @@ class Ntp:
         """
 
         if new_time is None:
-            new_time = cls.network_time(cls.device_epoch())
+            new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
             raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(ppm))
 
         # Take into account the time from the moment it was taken up to this point
         ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
-        lt = time.localtime(ntp_us // 1000_000)
+        lt = time.gmtime(ntp_us // 1000_000)
         # lt = (year, month, day, hour, minute, second, weekday, yearday)
         # index  0      1     2    3      4       5       6         7
 
@@ -577,8 +596,8 @@ class Ntp:
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
-        epoch_offset = cls._epoch_offset(cls.device_epoch(), epoch)
-        return 0 if cls._rtc_last_sync == 0 else cls._rtc_last_sync + (epoch_offset + timezone_and_dst) * 1000_000
+        epoch_delta = cls.epoch_delta(cls.device_epoch(), epoch)
+        return 0 if cls._rtc_last_sync == 0 else cls._rtc_last_sync + (epoch_delta + timezone_and_dst) * 1000_000
 
     @classmethod
     def drift_calculate(cls, new_time = None):
@@ -621,7 +640,7 @@ class Ntp:
             return 0.0, 0
 
         if new_time is None:
-            new_time = cls.network_time(cls.device_epoch())
+            new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
             raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(ppm))
 
@@ -650,8 +669,8 @@ class Ntp:
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
-        epoch_offset = cls._epoch_offset(cls.device_epoch(), epoch)
-        return 0 if cls._drift_last_compensate == 0 else cls._drift_last_compensate + (epoch_offset + timezone_and_dst) * 1000_000
+        epoch_delta = cls.epoch_delta(cls.device_epoch(), epoch)
+        return 0 if cls._drift_last_compensate == 0 else cls._drift_last_compensate + (epoch_delta + timezone_and_dst) * 1000_000
 
     @classmethod
     def drift_last_calculate(cls, epoch: int = None, utc: bool = False):
@@ -667,8 +686,8 @@ class Ntp:
         """
 
         timezone_and_dst = 0 if utc else (cls._timezone + cls.dst())
-        epoch_offset = cls._epoch_offset(cls.device_epoch(), epoch)
-        return 0 if cls._drift_last_calculate == 0 else cls._drift_last_calculate + (epoch_offset + timezone_and_dst) * 1000_000
+        epoch_delta = cls.epoch_delta(cls.device_epoch(), epoch)
+        return 0 if cls._drift_last_calculate == 0 else cls._drift_last_calculate + (epoch_delta + timezone_and_dst) * 1000_000
 
     @classmethod
     def drift_ppm(cls):
@@ -738,7 +757,7 @@ class Ntp:
             raise ValueError('Invalid parameter: compensate_us={} must be int'.format(compensate_us))
 
         rtc_us = cls.time_us(epoch = cls.device_epoch(), utc = True) + compensate_us
-        lt = time.localtime(rtc_us // 1000_000)
+        lt = time.gmtime(rtc_us // 1000_000)
         # lt = (year, month, day, hour, minute, second, weekday, yearday)
         # index  0      1     2    3      4       5       6         7
 
@@ -888,6 +907,60 @@ class Ntp:
         return day
 
     @classmethod
+    def epoch_delta(cls, from_epoch: int, to_epoch: int):
+        """ Calculates the delta between two epochs. If you want to convert a timestamp from an earlier epoch to a latter,
+        you will have to subtract the seconds between the two epochs. If you want to convert a timestamp from a latter epoch to an earlier,
+        you will have to add the seconds between the two epochs. The function takes that into account and returns a positive or negative value.
+
+        Args:
+            from_epoch (int, None): an epoch according to which the time will be calculated. If None, the user selected epoch will be used.
+                Possible values: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None
+            to_epoch (int, None): an epoch according to which the time will be calculated. If None, the user selected epoch will be used.
+                Possible values: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None
+
+        Returns:
+            int: The delta between the two epochs in seconds. Positive or negative number
+        """
+
+        if from_epoch is None:
+            from_epoch = cls._epoch
+        elif not isinstance(from_epoch, int) or not (cls.EPOCH_1900 <= from_epoch <= cls.EPOCH_2000):
+            raise ValueError('Invalid parameter: from_epoch={} must be a one of Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None'.format(from_epoch))
+
+        if to_epoch is None:
+            to_epoch = cls._epoch
+        elif not isinstance(to_epoch, int) or not (cls.EPOCH_1900 <= to_epoch <= cls.EPOCH_2000):
+            raise ValueError('Invalid parameter: to_epoch={} must be a one of Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None'.format(to_epoch))
+
+        return cls.__epoch_delta_lut[from_epoch][to_epoch]
+
+    @classmethod
+    def device_epoch(cls):
+        """ Get the device's epoch. Most of the micropython ports use the epoch of 2000, but some like the Unix port does use a different epoch.
+        Functions like time.gmtime() and RTC.datetime() will use the device's epoch.
+
+        Returns:
+            int: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000
+        """
+        # Return the cached value
+        if cls._device_epoch is not None:
+            return cls._device_epoch
+
+        # Get the device epoch
+        year = time.gmtime(0)[0]
+        if year == 1900:
+            cls._device_epoch = cls.EPOCH_1900
+            return cls._device_epoch
+        elif year == 1970:
+            cls._device_epoch = cls.EPOCH_1970
+            return cls._device_epoch
+        elif year == 2000:
+            cls._device_epoch = cls.EPOCH_2000
+            return cls._device_epoch
+
+        raise RuntimeError('Unsupported device epoch({})'.format(year))
+
+    @classmethod
     def _log(cls, message: str):
         """ Use the logger callback to log a message.
 
@@ -987,55 +1060,3 @@ class Ntp:
             return False
 
         return True
-
-    @classmethod
-    def _epoch_offset(cls, from_epoch: int, to_epoch: int):
-        """ Helper function that calculates the delta between two epochs. The delta can be positive or negative
-
-        Args:
-            from_epoch (int, None): an epoch according to which the time will be calculated. If None, the user selected epoch will be used.
-                Possible values: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None
-            to_epoch (int, None): an epoch according to which the time will be calculated. If None, the user selected epoch will be used.
-                Possible values: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None
-
-        Returns:
-            int: The delta between the two epochs in seconds
-        """
-
-        if from_epoch is None:
-            from_epoch = cls._epoch
-        elif not isinstance(from_epoch, int) or not (cls.EPOCH_1900 <= from_epoch <= cls.EPOCH_2000):
-            raise ValueError('Invalid parameter: from_epoch={} must be a one of Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None'.format(from_epoch))
-
-        if to_epoch is None:
-            to_epoch = cls._epoch
-        elif not isinstance(to_epoch, int) or not (cls.EPOCH_1900 <= to_epoch <= cls.EPOCH_2000):
-            raise ValueError('Invalid parameter: to_epoch={} must be a one of Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None'.format(to_epoch))
-
-        return cls.__epoch_offset_lut[from_epoch][to_epoch]
-
-    @classmethod
-    def device_epoch(cls):
-        """ Get the device's epoch. Most of the micropython ports use the epoch of 2000, but some like the Unix port does use a different epoch.
-        Functions like time.localtime() and RTC.datetime() will use the device's epoch. Also, the class variables will be stored in the device's epoch.
-
-        Returns:
-            int: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000
-        """
-        # Return the cached value
-        if cls._device_epoch is not None:
-            return cls._device_epoch
-
-        # Get the device epoch
-        year = time.gmtime(0)[0]
-        if year == 1900:
-            cls._device_epoch = cls.EPOCH_1900
-            return cls._device_epoch
-        elif year == 1970:
-            cls._device_epoch = cls.EPOCH_1970
-            return cls._device_epoch
-        elif year == 2000:
-            cls._device_epoch = cls.EPOCH_2000
-            return cls._device_epoch
-
-        raise RuntimeError('Unsupported device epoch({})'.format(year))
