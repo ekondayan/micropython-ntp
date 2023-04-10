@@ -571,7 +571,7 @@ class Ntp:
         if new_time is None:
             new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-            raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(ppm))
+            raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(new_time))
 
         # Take into account the time from the moment it was taken up to this point
         ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
@@ -642,7 +642,7 @@ class Ntp:
         if new_time is None:
             new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-            raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(ppm))
+            raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(new_time))
 
         rtc_us = cls.time_us(epoch = cls.device_epoch(), utc = True)
         # For maximum precision, negate the execution time of all the instructions up to this point
