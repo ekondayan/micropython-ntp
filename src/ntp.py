@@ -50,7 +50,7 @@ class Ntp:
     WEEK_FIRST = const(1)
     WEEK_SECOND = const(2)
     WEEK_THIRD = const(3)
-    WEEK_FORTH = const(4)
+    WEEK_FOURTH = const(4)
     WEEK_FIFTH = const(5)
     WEEK_LAST = const(6)
 
@@ -296,10 +296,12 @@ class Ntp:
                 'Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hour, minute, second, subsecond)'.format(dt))
 
         # Calculates and caches the hours since the beginning of the month when the DST starts/ends
-        if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+        if dt[0] != cls._dst_cache_switch_hours_timestamp or \
+         cls._dst_cache_switch_hours_start is None or \
+         cls._dst_cache_switch_hours_end   is None:
             cls._dst_cache_switch_hours_timestamp = dt[0]
-            cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
-            cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+            cls._dst_cache_switch_hours_start = cls.weekday_in_month(dt[0], cls._dst_start[0], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            cls._dst_cache_switch_hours_end = cls.weekday_in_month(dt[0], cls._dst_end[0], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
 
         # Condition 1: The current month is strictly within the DST period
         # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
@@ -856,6 +858,45 @@ class Ntp:
                 weeks_list.append((weeks_list[i][1] + 1, first_sunday + (i + 1) * 7))
 
         return weeks_list
+
+    @classmethod
+    def weekday_in_month(cls, year:int, month:int, ordinal_weekday:int, weekday:int):
+        """Calculate and return the day of the month for the Nth ordinal occurrence of the specified weekday
+        within a given month and year.  If there are fewer occurrences of the specified weekday in the month,
+        the function returns the day of the last occurrence of the specified weekday. For instance, if you are
+        looking for the second Tuesday of a month, "second" is the ordinal representing the occurrence of
+        the weekday "Tuesday," and you would use 2 as the value for the ordinal_weekday parameter in the function.
+        Example:
+            weekday_in_month(2021, Ntp.MONTH_MAR, Ntp.WEEK_SECOND, Ntp.WEEKDAY_SUN)
+            weekday_in_month(2021, Ntp.MONTH_OCT, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN)
+
+        Args:
+            year (int): The year for which the calculation is to be made, must be an integer greater than 1.
+            month (int): The month for which the calculation is to be made, must be an integer in the range 1(Jan) - 12(Dec).
+            ordinal_weekday (int): Represents the ordinal occurance of the weekday in the specified month, must be an integer in the range 1-6.
+            weekday (int): Represents the specific weekday, must be an integer in the range 0(Mon)-6(Sun).
+
+        Returns:
+            int: The day of the month of the Nth ordinal occurrence of the specified weekday. If the ordinal specified is greater
+                 than the total occurrences of the weekday in that month, it returns the day of the last occurrence of the specified weekday.
+
+        Raises:
+            ValueError: If any of the parameters are of incorrect type or out of the valid range.
+        """
+        
+        if not isinstance(year, int) or not 1 <= year:
+            raise ValueError('Invalid parameter: year={} must be int and greater than 1'.format(year))
+        elif not isinstance(month, int) or not cls.MONTH_JAN <= month <= cls.MONTH_DEC:
+            raise ValueError('Invalid parameter: month={} must be int in range 1-12'.format(month))
+        elif not isinstance(ordinal_weekday, int) or not cls.WEEK_FIRST <= ordinal_weekday <= cls.WEEK_LAST:
+            raise ValueError('Invalid parameter: ordinal_weekday={} must be int in range 1-6'.format(ordinal_weekday))
+        elif not isinstance(weekday, int) or not cls.WEEKDAY_MON <= weekday <= cls.WEEKDAY_SUN:
+            raise ValueError('Invalid parameter: weekday={} must be int in range 0-6'.format(weekday))
+        
+        first_weekday = cls.weekday(year, month, 1)     # weekday of first day of month
+        first_day = 1 + (weekday - first_weekday) % 7   # monthday of first requested weekday
+        weekdays = [i for i in range(first_day, cls.days_in_month(year, month) + 1, 7)]
+        return weekdays[-1] if ordinal_weekday > len(weekdays) else weekdays[ordinal_weekday - 1]
 
     @classmethod
     def day_from_week_and_weekday(cls, year, month, week, weekday):
