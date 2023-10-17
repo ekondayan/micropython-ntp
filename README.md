@@ -441,7 +441,15 @@ Ntp.drift_us()
 
 * Module re
 
-* 
+# <u>Contributions</u>
+
+If you want to help me improve this library, you can open Pull Requests. Only very well-documented PRs will be accepted. Please use clear and meaningful commit messages to explain what you've done.
+
+A strong emphasis is placed on documentation. Ensure that all methods and classes have clear and concise docstrings. In addition to docstrings, it's desirable to include comments within your code to provide context and explain the logic, especially in complex sections. If you introduce a new feature, consider updating or creating a corresponding documentation section.
+
+Before submitting your PR, ensure that you've tested your changes thoroughly. If possible, add unit tests for any new functionality you've added. This will not only improve the reliability of the project but will also increase the chances of your PR being accepted.
+
+Thank you for your interest in contributing! Every effort, big or small, is highly valued.
 
 # <u>Download</u>
 
