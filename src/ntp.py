@@ -890,7 +890,8 @@ class Ntp:
             raise ValueError('Invalid parameter: weekday={} must be int in range 0-6'.format(weekday))
 
         weeks = cls.weeks_in_month(year, month)
-        days_in_month = cls.days_in_month(year, month)
+        # Last day of the last week is the total days in month. This is faster instead of calling days_in_month(year, month)
+        days_in_month = weeks[-1][1]
 
         week_tuple = weeks[-1] if week > len(weeks) else weeks[week - 1]
         day = week_tuple[0] + weekday
@@ -903,6 +904,10 @@ class Ntp:
         # The desired weekday overflow the last day of the week
         if day > week_tuple[1]:
             raise Exception('The weekday does not exists in the selected week')
+
+        # If first week does not contain the week day return the weekday from the second week
+        if week == 0 and weeks[0][0] + (6 - weekday) > weeks[0][1]:
+            return weeks[1][0] + weekday
 
         return day
 
