@@ -905,9 +905,13 @@ class Ntp:
         if day > week_tuple[1]:
             raise Exception('The weekday does not exists in the selected week')
 
-        # If first week does not contain the week day return the weekday from the second week
-        if week == 0 and weeks[0][0] + (6 - weekday) > weeks[0][1]:
-            return weeks[1][0] + weekday
+        # The first week is an edge case thus it must be handled in a special way
+        if week == cls.WEEK_FIRST:
+            # If first week does not contain the week day return the weekday from the second week
+            if weeks[0][0] + (6 - weekday) > weeks[0][1]:
+                return weeks[1][0] + weekday
+
+            return weekday - (6 - weeks[0][1])
 
         return day
 
