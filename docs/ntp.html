@@ -78,7 +78,7 @@ class Ntp:
     WEEK_FIRST = const(1)
     WEEK_SECOND = const(2)
     WEEK_THIRD = const(3)
-    WEEK_FORTH = const(4)
+    WEEK_FOURTH = const(4)
     WEEK_FIFTH = const(5)
     WEEK_LAST = const(6)
 
@@ -324,10 +324,12 @@ class Ntp:
                 &#39;Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hour, minute, second, subsecond)&#39;.format(dt))
 
         # Calculates and caches the hours since the beginning of the month when the DST starts/ends
-        if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+        if dt[0] != cls._dst_cache_switch_hours_timestamp or \
+                cls._dst_cache_switch_hours_start is None or \
+                cls._dst_cache_switch_hours_end is None:
             cls._dst_cache_switch_hours_timestamp = dt[0]
-            cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
-            cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+            cls._dst_cache_switch_hours_start = cls.weekday_in_month(dt[0], cls._dst_start[0], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            cls._dst_cache_switch_hours_end = cls.weekday_in_month(dt[0], cls._dst_end[0], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
 
         # Condition 1: The current month is strictly within the DST period
         # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
@@ -402,26 +404,25 @@ class Ntp:
 
     @classmethod
     def set_timezone(cls, hour: int, minute: int = 0):
-        &#34;&#34;&#34; Set the timezone. The typical time shift is multiple of a whole hour, but a time shift with minutes is also
-        possible. A basic validity check is made for the correctness of the timezone.
+        &#34;&#34;&#34; Validates if the provided hour and minute values represent a valid timezone offset.
+        The valid hour range is -12 to +14 for a zero minute offset, and specific values
+        for 30 and 45 minute offsets. Raises ValueError if the inputs are not integers, and
+        raises Exception for invalid timezone combinations.
 
         Args:
-            hour (int): hours offset of the timezone. Type is &#39;int&#39;
-            minute (int): minutes offset of the timezone. Type is &#39;int&#39;
+            hour (int): Timezone hour offset.
+            minute (int, optional): Timezone minute offset. Default is 0.
         &#34;&#34;&#34;
 
-        if not isinstance(hour, int):
-            raise ValueError(&#39;Invalid parameter: hour={} must be int&#39;.format(hour))
-
-        if not isinstance(minute, int):
-            raise ValueError(&#39;Invalid parameter: minute={} must be int&#39;.format(minute))
+        if not isinstance(hour, int) or not isinstance(minute, int):
+            raise ValueError(&#39;Invalid parameter: hour={}, minute={} must be integers&#39;.format(hour, minute))
 
         if (
-                (minute == 0 and not (-12 &lt;= hour &lt;= 12)) or
+                (minute == 0 and not (-12 &lt;= hour &lt;= 14)) or
                 (minute == 30 and hour not in (-9, -3, 3, 4, 5, 6, 9, 10)) or
                 (minute == 45 and hour not in (5, 8, 12))
         ):
-            raise Exception(&#39;Invalid timezone for hour={} and minute={}&#39;.format(hour, minute))
+            raise ValueError(&#39;Invalid timezone for hour={} and minute={}&#39;.format(hour, minute))
 
         cls._timezone = hour * 3600 + minute * 60
 
@@ -599,7 +600,7 @@ class Ntp:
         if new_time is None:
             new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(ppm))
+            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(new_time))
 
         # Take into account the time from the moment it was taken up to this point
         ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
@@ -670,7 +671,7 @@ class Ntp:
         if new_time is None:
             new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(ppm))
+            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(new_time))
 
         rtc_us = cls.time_us(epoch = cls.device_epoch(), utc = True)
         # For maximum precision, negate the execution time of all the instructions up to this point
@@ -886,6 +887,45 @@ class Ntp:
         return weeks_list
 
     @classmethod
+    def weekday_in_month(cls, year: int, month: int, ordinal_weekday: int, weekday: int):
+        &#34;&#34;&#34;Calculate and return the day of the month for the Nth ordinal occurrence of the specified weekday
+        within a given month and year.  If there are fewer occurrences of the specified weekday in the month,
+        the function returns the day of the last occurrence of the specified weekday. For instance, if you are
+        looking for the second Tuesday of a month, &#34;second&#34; is the ordinal representing the occurrence of
+        the weekday &#34;Tuesday,&#34; and you would use 2 as the value for the ordinal_weekday parameter in the function.
+        Example:
+            weekday_in_month(2021, Ntp.MONTH_MAR, Ntp.WEEK_SECOND, Ntp.WEEKDAY_SUN)
+            weekday_in_month(2021, Ntp.MONTH_OCT, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN)
+
+        Args:
+            year (int): The year for which the calculation is to be made, must be an integer greater than 1.
+            month (int): The month for which the calculation is to be made, must be an integer in the range 1(Jan) - 12(Dec).
+            ordinal_weekday (int): Represents the ordinal occurance of the weekday in the specified month, must be an integer in the range 1-6.
+            weekday (int): Represents the specific weekday, must be an integer in the range 0(Mon)-6(Sun).
+
+        Returns:
+            int: The day of the month of the Nth ordinal occurrence of the specified weekday. If the ordinal specified is greater
+                 than the total occurrences of the weekday in that month, it returns the day of the last occurrence of the specified weekday.
+
+        Raises:
+            ValueError: If any of the parameters are of incorrect type or out of the valid range.
+        &#34;&#34;&#34;
+
+        if not isinstance(year, int) or not 1 &lt;= year:
+            raise ValueError(&#39;Invalid parameter: year={} must be int and greater than 1&#39;.format(year))
+        elif not isinstance(month, int) or not cls.MONTH_JAN &lt;= month &lt;= cls.MONTH_DEC:
+            raise ValueError(&#39;Invalid parameter: month={} must be int in range 1-12&#39;.format(month))
+        elif not isinstance(ordinal_weekday, int) or not cls.WEEK_FIRST &lt;= ordinal_weekday &lt;= cls.WEEK_LAST:
+            raise ValueError(&#39;Invalid parameter: ordinal_weekday={} must be int in range 1-6&#39;.format(ordinal_weekday))
+        elif not isinstance(weekday, int) or not cls.WEEKDAY_MON &lt;= weekday &lt;= cls.WEEKDAY_SUN:
+            raise ValueError(&#39;Invalid parameter: weekday={} must be int in range 0-6&#39;.format(weekday))
+
+        first_weekday = cls.weekday(year, month, 1)  # weekday of first day of month
+        first_day = 1 + (weekday - first_weekday) % 7  # monthday of first requested weekday
+        weekdays = [i for i in range(first_day, cls.days_in_month(year, month) + 1, 7)]
+        return weekdays[-1] if ordinal_weekday &gt; len(weekdays) else weekdays[ordinal_weekday - 1]
+
+    @classmethod
     def day_from_week_and_weekday(cls, year, month, week, weekday):
         &#34;&#34;&#34; Calculate the day based on year, month, week and weekday. If the selected week is
         outside the boundaries of the month, the last weekday of the month will be returned.
@@ -918,7 +958,8 @@ class Ntp:
             raise ValueError(&#39;Invalid parameter: weekday={} must be int in range 0-6&#39;.format(weekday))
 
         weeks = cls.weeks_in_month(year, month)
-        days_in_month = cls.days_in_month(year, month)
+        # Last day of the last week is the total days in month. This is faster instead of calling days_in_month(year, month)
+        days_in_month = weeks[-1][1]
 
         week_tuple = weeks[-1] if week &gt; len(weeks) else weeks[week - 1]
         day = week_tuple[0] + weekday
@@ -931,6 +972,14 @@ class Ntp:
         # The desired weekday overflow the last day of the week
         if day &gt; week_tuple[1]:
             raise Exception(&#39;The weekday does not exists in the selected week&#39;)
+
+        # The first week is an edge case thus it must be handled in a special way
+        if week == cls.WEEK_FIRST:
+            # If first week does not contain the week day return the weekday from the second week
+            if weeks[0][0] + (6 - weekday) &gt; weeks[0][1]:
+                return weeks[1][0] + weekday
+
+            return weekday - (6 - weeks[0][1])
 
         return day
 
@@ -1145,7 +1194,7 @@ class Ntp:
     WEEK_FIRST = const(1)
     WEEK_SECOND = const(2)
     WEEK_THIRD = const(3)
-    WEEK_FORTH = const(4)
+    WEEK_FOURTH = const(4)
     WEEK_FIFTH = const(5)
     WEEK_LAST = const(6)
 
@@ -1391,10 +1440,12 @@ class Ntp:
                 &#39;Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hour, minute, second, subsecond)&#39;.format(dt))
 
         # Calculates and caches the hours since the beginning of the month when the DST starts/ends
-        if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+        if dt[0] != cls._dst_cache_switch_hours_timestamp or \
+                cls._dst_cache_switch_hours_start is None or \
+                cls._dst_cache_switch_hours_end is None:
             cls._dst_cache_switch_hours_timestamp = dt[0]
-            cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
-            cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+            cls._dst_cache_switch_hours_start = cls.weekday_in_month(dt[0], cls._dst_start[0], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+            cls._dst_cache_switch_hours_end = cls.weekday_in_month(dt[0], cls._dst_end[0], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
 
         # Condition 1: The current month is strictly within the DST period
         # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
@@ -1469,26 +1520,25 @@ class Ntp:
 
     @classmethod
     def set_timezone(cls, hour: int, minute: int = 0):
-        &#34;&#34;&#34; Set the timezone. The typical time shift is multiple of a whole hour, but a time shift with minutes is also
-        possible. A basic validity check is made for the correctness of the timezone.
+        &#34;&#34;&#34; Validates if the provided hour and minute values represent a valid timezone offset.
+        The valid hour range is -12 to +14 for a zero minute offset, and specific values
+        for 30 and 45 minute offsets. Raises ValueError if the inputs are not integers, and
+        raises Exception for invalid timezone combinations.
 
         Args:
-            hour (int): hours offset of the timezone. Type is &#39;int&#39;
-            minute (int): minutes offset of the timezone. Type is &#39;int&#39;
+            hour (int): Timezone hour offset.
+            minute (int, optional): Timezone minute offset. Default is 0.
         &#34;&#34;&#34;
 
-        if not isinstance(hour, int):
-            raise ValueError(&#39;Invalid parameter: hour={} must be int&#39;.format(hour))
-
-        if not isinstance(minute, int):
-            raise ValueError(&#39;Invalid parameter: minute={} must be int&#39;.format(minute))
+        if not isinstance(hour, int) or not isinstance(minute, int):
+            raise ValueError(&#39;Invalid parameter: hour={}, minute={} must be integers&#39;.format(hour, minute))
 
         if (
-                (minute == 0 and not (-12 &lt;= hour &lt;= 12)) or
+                (minute == 0 and not (-12 &lt;= hour &lt;= 14)) or
                 (minute == 30 and hour not in (-9, -3, 3, 4, 5, 6, 9, 10)) or
                 (minute == 45 and hour not in (5, 8, 12))
         ):
-            raise Exception(&#39;Invalid timezone for hour={} and minute={}&#39;.format(hour, minute))
+            raise ValueError(&#39;Invalid timezone for hour={} and minute={}&#39;.format(hour, minute))
 
         cls._timezone = hour * 3600 + minute * 60
 
@@ -1666,7 +1716,7 @@ class Ntp:
         if new_time is None:
             new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(ppm))
+            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(new_time))
 
         # Take into account the time from the moment it was taken up to this point
         ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
@@ -1737,7 +1787,7 @@ class Ntp:
         if new_time is None:
             new_time = cls.ntp_time(cls.device_epoch())
         elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(ppm))
+            raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(new_time))
 
         rtc_us = cls.time_us(epoch = cls.device_epoch(), utc = True)
         # For maximum precision, negate the execution time of all the instructions up to this point
@@ -1953,6 +2003,45 @@ class Ntp:
         return weeks_list
 
     @classmethod
+    def weekday_in_month(cls, year: int, month: int, ordinal_weekday: int, weekday: int):
+        &#34;&#34;&#34;Calculate and return the day of the month for the Nth ordinal occurrence of the specified weekday
+        within a given month and year.  If there are fewer occurrences of the specified weekday in the month,
+        the function returns the day of the last occurrence of the specified weekday. For instance, if you are
+        looking for the second Tuesday of a month, &#34;second&#34; is the ordinal representing the occurrence of
+        the weekday &#34;Tuesday,&#34; and you would use 2 as the value for the ordinal_weekday parameter in the function.
+        Example:
+            weekday_in_month(2021, Ntp.MONTH_MAR, Ntp.WEEK_SECOND, Ntp.WEEKDAY_SUN)
+            weekday_in_month(2021, Ntp.MONTH_OCT, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN)
+
+        Args:
+            year (int): The year for which the calculation is to be made, must be an integer greater than 1.
+            month (int): The month for which the calculation is to be made, must be an integer in the range 1(Jan) - 12(Dec).
+            ordinal_weekday (int): Represents the ordinal occurance of the weekday in the specified month, must be an integer in the range 1-6.
+            weekday (int): Represents the specific weekday, must be an integer in the range 0(Mon)-6(Sun).
+
+        Returns:
+            int: The day of the month of the Nth ordinal occurrence of the specified weekday. If the ordinal specified is greater
+                 than the total occurrences of the weekday in that month, it returns the day of the last occurrence of the specified weekday.
+
+        Raises:
+            ValueError: If any of the parameters are of incorrect type or out of the valid range.
+        &#34;&#34;&#34;
+
+        if not isinstance(year, int) or not 1 &lt;= year:
+            raise ValueError(&#39;Invalid parameter: year={} must be int and greater than 1&#39;.format(year))
+        elif not isinstance(month, int) or not cls.MONTH_JAN &lt;= month &lt;= cls.MONTH_DEC:
+            raise ValueError(&#39;Invalid parameter: month={} must be int in range 1-12&#39;.format(month))
+        elif not isinstance(ordinal_weekday, int) or not cls.WEEK_FIRST &lt;= ordinal_weekday &lt;= cls.WEEK_LAST:
+            raise ValueError(&#39;Invalid parameter: ordinal_weekday={} must be int in range 1-6&#39;.format(ordinal_weekday))
+        elif not isinstance(weekday, int) or not cls.WEEKDAY_MON &lt;= weekday &lt;= cls.WEEKDAY_SUN:
+            raise ValueError(&#39;Invalid parameter: weekday={} must be int in range 0-6&#39;.format(weekday))
+
+        first_weekday = cls.weekday(year, month, 1)  # weekday of first day of month
+        first_day = 1 + (weekday - first_weekday) % 7  # monthday of first requested weekday
+        weekdays = [i for i in range(first_day, cls.days_in_month(year, month) + 1, 7)]
+        return weekdays[-1] if ordinal_weekday &gt; len(weekdays) else weekdays[ordinal_weekday - 1]
+
+    @classmethod
     def day_from_week_and_weekday(cls, year, month, week, weekday):
         &#34;&#34;&#34; Calculate the day based on year, month, week and weekday. If the selected week is
         outside the boundaries of the month, the last weekday of the month will be returned.
@@ -1985,7 +2074,8 @@ class Ntp:
             raise ValueError(&#39;Invalid parameter: weekday={} must be int in range 0-6&#39;.format(weekday))
 
         weeks = cls.weeks_in_month(year, month)
-        days_in_month = cls.days_in_month(year, month)
+        # Last day of the last week is the total days in month. This is faster instead of calling days_in_month(year, month)
+        days_in_month = weeks[-1][1]
 
         week_tuple = weeks[-1] if week &gt; len(weeks) else weeks[week - 1]
         day = week_tuple[0] + weekday
@@ -1998,6 +2088,14 @@ class Ntp:
         # The desired weekday overflow the last day of the week
         if day &gt; week_tuple[1]:
             raise Exception(&#39;The weekday does not exists in the selected week&#39;)
+
+        # The first week is an edge case thus it must be handled in a special way
+        if week == cls.WEEK_FIRST:
+            # If first week does not contain the week day return the weekday from the second week
+            if weeks[0][0] + (6 - weekday) &gt; weeks[0][1]:
+                return weeks[1][0] + weekday
+
+            return weekday - (6 - weeks[0][1])
 
         return day
 
@@ -2254,7 +2352,7 @@ class Ntp:
 <dd>
 <div class="desc"></div>
 </dd>
-<dt id="ntp.Ntp.WEEK_FORTH"><code class="name">var <span class="ident">WEEK_FORTH</span></code></dt>
+<dt id="ntp.Ntp.WEEK_FOURTH"><code class="name">var <span class="ident">WEEK_FOURTH</span></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -2340,7 +2438,8 @@ def day_from_week_and_weekday(cls, year, month, week, weekday):
         raise ValueError(&#39;Invalid parameter: weekday={} must be int in range 0-6&#39;.format(weekday))
 
     weeks = cls.weeks_in_month(year, month)
-    days_in_month = cls.days_in_month(year, month)
+    # Last day of the last week is the total days in month. This is faster instead of calling days_in_month(year, month)
+    days_in_month = weeks[-1][1]
 
     week_tuple = weeks[-1] if week &gt; len(weeks) else weeks[week - 1]
     day = week_tuple[0] + weekday
@@ -2353,6 +2452,14 @@ def day_from_week_and_weekday(cls, year, month, week, weekday):
     # The desired weekday overflow the last day of the week
     if day &gt; week_tuple[1]:
         raise Exception(&#39;The weekday does not exists in the selected week&#39;)
+
+    # The first week is an edge case thus it must be handled in a special way
+    if week == cls.WEEK_FIRST:
+        # If first week does not contain the week day return the weekday from the second week
+        if weeks[0][0] + (6 - weekday) &gt; weeks[0][1]:
+            return weeks[1][0] + weekday
+
+        return weekday - (6 - weeks[0][1])
 
     return day</code></pre>
 </details>
@@ -2531,7 +2638,7 @@ def drift_calculate(cls, new_time = None):
     if new_time is None:
         new_time = cls.ntp_time(cls.device_epoch())
     elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-        raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(ppm))
+        raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(new_time))
 
     rtc_us = cls.time_us(epoch = cls.device_epoch(), utc = True)
     # For maximum precision, negate the execution time of all the instructions up to this point
@@ -2784,10 +2891,12 @@ def dst(cls, dt = None):
             &#39;Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hour, minute, second, subsecond)&#39;.format(dt))
 
     # Calculates and caches the hours since the beginning of the month when the DST starts/ends
-    if dt[0] != cls._dst_cache_switch_hours_timestamp or cls._dst_cache_switch_hours_start is None or cls._dst_cache_switch_hours_end is None:
+    if dt[0] != cls._dst_cache_switch_hours_timestamp or \
+            cls._dst_cache_switch_hours_start is None or \
+            cls._dst_cache_switch_hours_end is None:
         cls._dst_cache_switch_hours_timestamp = dt[0]
-        cls._dst_cache_switch_hours_start = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
-        cls._dst_cache_switch_hours_end = cls.day_from_week_and_weekday(dt[0], dt[1], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
+        cls._dst_cache_switch_hours_start = cls.weekday_in_month(dt[0], cls._dst_start[0], cls._dst_start[1], cls._dst_start[2]) * 24 + cls._dst_start[3]
+        cls._dst_cache_switch_hours_end = cls.weekday_in_month(dt[0], cls._dst_end[0], cls._dst_end[1], cls._dst_end[2]) * 24 + cls._dst_end[3]
 
     # Condition 1: The current month is strictly within the DST period
     # Condition 2: Current month is the month the DST period starts. Calculates the current hours since the beginning of the month
@@ -3208,7 +3317,7 @@ def rtc_sync(cls, new_time = None):
     if new_time is None:
         new_time = cls.ntp_time(cls.device_epoch())
     elif not isinstance(new_time, tuple) or not len(new_time) == 2:
-        raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(ppm))
+        raise ValueError(&#39;Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)&#39;.format(new_time))
 
     # Take into account the time from the moment it was taken up to this point
     ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
@@ -3592,14 +3701,16 @@ def set_ntp_timeout(cls, timeout_s: int = 1):
 <span>def <span class="ident">set_timezone</span></span>(<span>hour: int, minute: int = 0)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Set the timezone. The typical time shift is multiple of a whole hour, but a time shift with minutes is also
-possible. A basic validity check is made for the correctness of the timezone.</p>
+<div class="desc"><p>Validates if the provided hour and minute values represent a valid timezone offset.
+The valid hour range is -12 to +14 for a zero minute offset, and specific values
+for 30 and 45 minute offsets. Raises ValueError if the inputs are not integers, and
+raises Exception for invalid timezone combinations.</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>hour</code></strong> :&ensp;<code>int</code></dt>
-<dd>hours offset of the timezone. Type is 'int'</dd>
-<dt><strong><code>minute</code></strong> :&ensp;<code>int</code></dt>
-<dd>minutes offset of the timezone. Type is 'int'</dd>
+<dd>Timezone hour offset.</dd>
+<dt><strong><code>minute</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>Timezone minute offset. Default is 0.</dd>
 </dl></div>
 <details class="source">
 <summary>
@@ -3607,26 +3718,25 @@ possible. A basic validity check is made for the correctness of the timezone.</p
 </summary>
 <pre><code class="python">@classmethod
 def set_timezone(cls, hour: int, minute: int = 0):
-    &#34;&#34;&#34; Set the timezone. The typical time shift is multiple of a whole hour, but a time shift with minutes is also
-    possible. A basic validity check is made for the correctness of the timezone.
+    &#34;&#34;&#34; Validates if the provided hour and minute values represent a valid timezone offset.
+    The valid hour range is -12 to +14 for a zero minute offset, and specific values
+    for 30 and 45 minute offsets. Raises ValueError if the inputs are not integers, and
+    raises Exception for invalid timezone combinations.
 
     Args:
-        hour (int): hours offset of the timezone. Type is &#39;int&#39;
-        minute (int): minutes offset of the timezone. Type is &#39;int&#39;
+        hour (int): Timezone hour offset.
+        minute (int, optional): Timezone minute offset. Default is 0.
     &#34;&#34;&#34;
 
-    if not isinstance(hour, int):
-        raise ValueError(&#39;Invalid parameter: hour={} must be int&#39;.format(hour))
-
-    if not isinstance(minute, int):
-        raise ValueError(&#39;Invalid parameter: minute={} must be int&#39;.format(minute))
+    if not isinstance(hour, int) or not isinstance(minute, int):
+        raise ValueError(&#39;Invalid parameter: hour={}, minute={} must be integers&#39;.format(hour, minute))
 
     if (
-            (minute == 0 and not (-12 &lt;= hour &lt;= 12)) or
+            (minute == 0 and not (-12 &lt;= hour &lt;= 14)) or
             (minute == 30 and hour not in (-9, -3, 3, 4, 5, 6, 9, 10)) or
             (minute == 45 and hour not in (5, 8, 12))
     ):
-        raise Exception(&#39;Invalid timezone for hour={} and minute={}&#39;.format(hour, minute))
+        raise ValueError(&#39;Invalid timezone for hour={} and minute={}&#39;.format(hour, minute))
 
     cls._timezone = hour * 3600 + minute * 60</code></pre>
 </details>
@@ -3876,6 +3986,85 @@ def weekday(cls, year: int, month: int, day: int):
     return cls.__weekdays[w]</code></pre>
 </details>
 </dd>
+<dt id="ntp.Ntp.weekday_in_month"><code class="name flex">
+<span>def <span class="ident">weekday_in_month</span></span>(<span>year: int, month: int, ordinal_weekday: int, weekday: int)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Calculate and return the day of the month for the Nth ordinal occurrence of the specified weekday
+within a given month and year.
+If there are fewer occurrences of the specified weekday in the month,
+the function returns the day of the last occurrence of the specified weekday. For instance, if you are
+looking for the second Tuesday of a month, "second" is the ordinal representing the occurrence of
+the weekday "Tuesday," and you would use 2 as the value for the ordinal_weekday parameter in the function.</p>
+<h2 id="example">Example</h2>
+<p>weekday_in_month(2021, Ntp.MONTH_MAR, Ntp.WEEK_SECOND, Ntp.WEEKDAY_SUN)
+weekday_in_month(2021, Ntp.MONTH_OCT, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN)</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>year</code></strong> :&ensp;<code>int</code></dt>
+<dd>The year for which the calculation is to be made, must be an integer greater than 1.</dd>
+<dt><strong><code>month</code></strong> :&ensp;<code>int</code></dt>
+<dd>The month for which the calculation is to be made, must be an integer in the range 1(Jan) - 12(Dec).</dd>
+<dt><strong><code>ordinal_weekday</code></strong> :&ensp;<code>int</code></dt>
+<dd>Represents the ordinal occurance of the weekday in the specified month, must be an integer in the range 1-6.</dd>
+<dt><strong><code>weekday</code></strong> :&ensp;<code>int</code></dt>
+<dd>Represents the specific weekday, must be an integer in the range 0(Mon)-6(Sun).</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>int</code></dt>
+<dd>The day of the month of the Nth ordinal occurrence of the specified weekday. If the ordinal specified is greater
+than the total occurrences of the weekday in that month, it returns the day of the last occurrence of the specified weekday.</dd>
+</dl>
+<h2 id="raises">Raises</h2>
+<dl>
+<dt><code>ValueError</code></dt>
+<dd>If any of the parameters are of incorrect type or out of the valid range.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@classmethod
+def weekday_in_month(cls, year: int, month: int, ordinal_weekday: int, weekday: int):
+    &#34;&#34;&#34;Calculate and return the day of the month for the Nth ordinal occurrence of the specified weekday
+    within a given month and year.  If there are fewer occurrences of the specified weekday in the month,
+    the function returns the day of the last occurrence of the specified weekday. For instance, if you are
+    looking for the second Tuesday of a month, &#34;second&#34; is the ordinal representing the occurrence of
+    the weekday &#34;Tuesday,&#34; and you would use 2 as the value for the ordinal_weekday parameter in the function.
+    Example:
+        weekday_in_month(2021, Ntp.MONTH_MAR, Ntp.WEEK_SECOND, Ntp.WEEKDAY_SUN)
+        weekday_in_month(2021, Ntp.MONTH_OCT, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN)
+
+    Args:
+        year (int): The year for which the calculation is to be made, must be an integer greater than 1.
+        month (int): The month for which the calculation is to be made, must be an integer in the range 1(Jan) - 12(Dec).
+        ordinal_weekday (int): Represents the ordinal occurance of the weekday in the specified month, must be an integer in the range 1-6.
+        weekday (int): Represents the specific weekday, must be an integer in the range 0(Mon)-6(Sun).
+
+    Returns:
+        int: The day of the month of the Nth ordinal occurrence of the specified weekday. If the ordinal specified is greater
+             than the total occurrences of the weekday in that month, it returns the day of the last occurrence of the specified weekday.
+
+    Raises:
+        ValueError: If any of the parameters are of incorrect type or out of the valid range.
+    &#34;&#34;&#34;
+
+    if not isinstance(year, int) or not 1 &lt;= year:
+        raise ValueError(&#39;Invalid parameter: year={} must be int and greater than 1&#39;.format(year))
+    elif not isinstance(month, int) or not cls.MONTH_JAN &lt;= month &lt;= cls.MONTH_DEC:
+        raise ValueError(&#39;Invalid parameter: month={} must be int in range 1-12&#39;.format(month))
+    elif not isinstance(ordinal_weekday, int) or not cls.WEEK_FIRST &lt;= ordinal_weekday &lt;= cls.WEEK_LAST:
+        raise ValueError(&#39;Invalid parameter: ordinal_weekday={} must be int in range 1-6&#39;.format(ordinal_weekday))
+    elif not isinstance(weekday, int) or not cls.WEEKDAY_MON &lt;= weekday &lt;= cls.WEEKDAY_SUN:
+        raise ValueError(&#39;Invalid parameter: weekday={} must be int in range 0-6&#39;.format(weekday))
+
+    first_weekday = cls.weekday(year, month, 1)  # weekday of first day of month
+    first_day = 1 + (weekday - first_weekday) % 7  # monthday of first requested weekday
+    weekdays = [i for i in range(first_day, cls.days_in_month(year, month) + 1, 7)]
+    return weekdays[-1] if ordinal_weekday &gt; len(weekdays) else weekdays[ordinal_weekday - 1]</code></pre>
+</details>
+</dd>
 <dt id="ntp.Ntp.weeks_in_month"><code class="name flex">
 <span>def <span class="ident">weeks_in_month</span></span>(<span>year, month)</span>
 </code></dt>
@@ -3989,7 +4178,7 @@ def weeks_in_month(cls, year, month):
 <li><code><a title="ntp.Ntp.WEEKDAY_WED" href="#ntp.Ntp.WEEKDAY_WED">WEEKDAY_WED</a></code></li>
 <li><code><a title="ntp.Ntp.WEEK_FIFTH" href="#ntp.Ntp.WEEK_FIFTH">WEEK_FIFTH</a></code></li>
 <li><code><a title="ntp.Ntp.WEEK_FIRST" href="#ntp.Ntp.WEEK_FIRST">WEEK_FIRST</a></code></li>
-<li><code><a title="ntp.Ntp.WEEK_FORTH" href="#ntp.Ntp.WEEK_FORTH">WEEK_FORTH</a></code></li>
+<li><code><a title="ntp.Ntp.WEEK_FOURTH" href="#ntp.Ntp.WEEK_FOURTH">WEEK_FOURTH</a></code></li>
 <li><code><a title="ntp.Ntp.WEEK_LAST" href="#ntp.Ntp.WEEK_LAST">WEEK_LAST</a></code></li>
 <li><code><a title="ntp.Ntp.WEEK_SECOND" href="#ntp.Ntp.WEEK_SECOND">WEEK_SECOND</a></code></li>
 <li><code><a title="ntp.Ntp.WEEK_THIRD" href="#ntp.Ntp.WEEK_THIRD">WEEK_THIRD</a></code></li>
@@ -4030,6 +4219,7 @@ def weeks_in_month(cls, year, month):
 <li><code><a title="ntp.Ntp.time_s" href="#ntp.Ntp.time_s">time_s</a></code></li>
 <li><code><a title="ntp.Ntp.time_us" href="#ntp.Ntp.time_us">time_us</a></code></li>
 <li><code><a title="ntp.Ntp.weekday" href="#ntp.Ntp.weekday">weekday</a></code></li>
+<li><code><a title="ntp.Ntp.weekday_in_month" href="#ntp.Ntp.weekday_in_month">weekday_in_month</a></code></li>
 <li><code><a title="ntp.Ntp.weeks_in_month" href="#ntp.Ntp.weeks_in_month">weeks_in_month</a></code></li>
 </ul>
 </li>
