@@ -165,12 +165,13 @@ class Ntp:
             * week is in (Ntp.WEEK_FIRST ... Ntp.WEEK_LAST)
             * weekday is in (Ntp.WEEKDAY_MON ... Ntp.WEEKDAY_SUN)
             * hour is in (0 ... 23)
-        To disable DST set 'start' or 'end' to None or 'bias' to 0
+        To disable DST set 'start' or 'end' to None or 'bias' to 0. Clearing one of them will
+        clear the others. To quickly disable DST just call the function without arguments - set_dst()
 
         Args:
-            start (tuple): 4-tuple(month, week, weekday, hour) start of DST
-            end (tuple) :4-tuple(month, week, weekday, hour) end of DST
-            bias (int): Daylight Saving Time bias expressed in minutes
+            start (tuple): 4-tuple(month, week, weekday, hour) start of DST. Set to None to disable DST
+            end (tuple) :4-tuple(month, week, weekday, hour) end of DST. Set to None to disable DST
+            bias (int): Daylight Saving Time bias expressed in minutes. Set to 0 to disable DST
         """
 
         # Disable DST if bias is 0 or the start or end time is None
@@ -185,7 +186,7 @@ class Ntp:
         else:
             cls.set_dst_start(start[0], start[1], start[2], start[3])
             cls.set_dst_end(end[0], end[1], end[2], end[3])
-            cls.set_dst_time_bias(bias)
+            cls.set_dst_bias(bias)
 
     @classmethod
     def set_dst_start(cls, month: int, week: int, weekday: int, hour: int):
@@ -252,12 +253,13 @@ class Ntp:
         return cls._dst_end
 
     @classmethod
-    def set_dst_time_bias(cls, bias: int):
-        """ Set Daylight Saving Time bias expressed in minutes.
-        To disable DST set the bias to 0
+    def set_dst_bias(cls, bias: int):
+        """ Set Daylight Saving Time bias expressed in minutes. To disable DST set the bias to 0.
+        By disabling the DST, the dst_start and dst_end will be set None
 
         Args:
-            bias (int): minutes of the DST bias. Correct values are 30, 60, 90 and 120
+            bias (int): minutes of the DST bias. Correct values are 0, 30, 60, 90 and 120.
+                Setting to 0 effectively disables DST
         """
 
         if not isinstance(bias, int) or bias not in (0, 30, 60, 90, 120):
@@ -267,8 +269,14 @@ class Ntp:
             cls._dst_start = None
             cls._dst_end = None
 
-        # Time bias is stored in seconds
+        # Convert to seconds
         cls._dst_bias = bias * 60
+
+    @classmethod
+    def set_dst_time_bias(cls, bias: int):
+        """ TO BE DEPRECATED. The function is renamed to set_dst_bias(). This name will be deprecated soon
+        """
+        set_dst_bias(bias)
 
     @classmethod
     def get_dst_time_bias(cls):
@@ -278,7 +286,7 @@ class Ntp:
             int: minutes of the DST bias. Valid values are 30, 60, 90 and 120
         """
 
-        # Convert the time bias to minutes
+        # Convert to minutes
         return cls._dst_bias // 60
 
     @classmethod
@@ -293,7 +301,7 @@ class Ntp:
             int: Calculated DST bias in seconds
         """
 
-        # When DST is disabled, return 0
+        # Return 0 if DST is disabled
         if cls._dst_start is None or cls._dst_end is None or cls._dst_bias == 0:
             return 0
 
