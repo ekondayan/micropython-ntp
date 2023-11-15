@@ -74,8 +74,8 @@ class Ntp:
     _epoch = EPOCH_2000  # User selected epoch
     _device_epoch = None  # The device's epoch
 
-    _dst_start: tuple = ()  # (month, week, day of week, hour)
-    _dst_end: tuple = ()  # (month, week, day of week, hour)
+    _dst_start: (tuple, None) = None  # (month, week, day of week, hour)
+    _dst_end: (tuple, None) = None  # (month, week, day of week, hour)
     _dst_bias: int = 0  # Time bias in seconds
 
     _dst_cache_switch_hours_start = None  # Cache the switch hour calculation
@@ -165,20 +165,27 @@ class Ntp:
             * week is in (Ntp.WEEK_FIRST ... Ntp.WEEK_LAST)
             * weekday is in (Ntp.WEEKDAY_MON ... Ntp.WEEKDAY_SUN)
             * hour is in (0 ... 23)
+        To disable DST set 'start' or 'end' to None or 'bias' to 0
 
         Args:
             start (tuple): 4-tuple(month, week, weekday, hour) start of DST
             end (tuple) :4-tuple(month, week, weekday, hour) end of DST
             bias (int): Daylight Saving Time bias expressed in minutes
         """
-        if not isinstance(start, tuple) or not len(start) == 4:
-            raise ValueError("Invalid parameter: start={} must be a 4-tuple(month, week, weekday, hour)".format(start))
-        elif not isinstance(end, tuple) or not len(end) == 4:
-            raise ValueError("Invalid parameter: end={} must be a 4-tuple(month, week, weekday, hour)".format(end))
 
-        cls.set_dst_start(start[0], start[1], start[2], start[3])
-        cls.set_dst_end(end[0], end[1], end[2], end[3])
-        cls.set_dst_time_bias(bias)
+        # Disable DST if bias is 0 or the start or end time is None
+        if start is None or end is None or bias == 0:
+            cls._dst_start = None
+            cls._dst_end = None
+            cls._dst_bias = 0
+        elif not isinstance(start, tuple) or len(start) != 4:
+            raise ValueError("Invalid parameter: start={} must be a 4-tuple(month, week, weekday, hour)".format(start))
+        elif not isinstance(end, tuple) or len(end) != 4:
+            raise ValueError("Invalid parameter: end={} must be a 4-tuple(month, week, weekday, hour)".format(end))
+        else:
+            cls.set_dst_start(start[0], start[1], start[2], start[3])
+            cls.set_dst_end(end[0], end[1], end[2], end[3])
+            cls.set_dst_time_bias(bias)
 
     @classmethod
     def set_dst_start(cls, month: int, week: int, weekday: int, hour: int):
@@ -207,7 +214,7 @@ class Ntp:
         """ Get the start point of DST.
 
         Returns:
-            tuple: 4-tuple(month, week, weekday, hour)
+            tuple: 4-tuple(month, week, weekday, hour) or None if DST is disabled
         """
 
         return cls._dst_start
@@ -239,7 +246,7 @@ class Ntp:
         """ Get the end point of DST.
 
         Returns:
-            tuple: 4-tuple(month, week, weekday, hour)
+            tuple: 4-tuple(month, week, weekday, hour) or None if DST is disabled
         """
 
         return cls._dst_end
@@ -247,13 +254,18 @@ class Ntp:
     @classmethod
     def set_dst_time_bias(cls, bias: int):
         """ Set Daylight Saving Time bias expressed in minutes.
+        To disable DST set the bias to 0
 
         Args:
             bias (int): minutes of the DST bias. Correct values are 30, 60, 90 and 120
         """
 
-        if not isinstance(bias, int) or bias not in (30, 60, 90, 120):
-            raise ValueError("Invalid parameter: bias={} represents minutes offset and must be either 30, 60, 90 or 120".format(bias))
+        if not isinstance(bias, int) or bias not in (0, 30, 60, 90, 120):
+            raise ValueError("Invalid parameter: bias={} represents minutes offset and must be either 0, 30, 60, 90 or 120".format(bias))
+
+        if bias == 0:
+            cls._dst_start = None
+            cls._dst_end = None
 
         # Time bias is stored in seconds
         cls._dst_bias = bias * 60
@@ -282,11 +294,10 @@ class Ntp:
         """
 
         # When DST is disabled, return 0
-        if not cls._dst_start or not cls._dst_end:
+        if cls._dst_start is None or cls._dst_end is None or cls._dst_bias == 0:
             return 0
 
-        # If a datetime tuple is passed, the DST will be calculated according to it
-        # Otherwise read the current datetime
+        # If a datetime tuple is passed, the DST will be calculated according to it otherwise read the current datetime
         if dt is None:
             # dt = (year, month, day, weekday, hour, minute, second, subsecond)
             # index  0      1     2      3       4      5       6        7
