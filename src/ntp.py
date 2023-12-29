@@ -505,19 +505,31 @@ class Ntp:
 
     @classmethod
     def ntp_time(cls, epoch: int = None):
-        """ Get the accurate time from the first valid NTP server in the list with microsecond precision. When the server
-        does not respond within the timeout period, the next server in the list is used. The default timeout is 1 sec.
-        The timeout can be changed with `set_ntp_timeout()`. When none of the servers respond, throw an Exception.
+        """
+            Retrieves the current UTC time from the first responsive NTP server in the provided server list with microsecond precision.
+            This method attempts to connect to NTP servers sequentially, based on the server list order, until a response is received or the list is exhausted.
 
-        Args:
-            epoch (int, None): an epoch according to which the time will be calculated. If None, the user selected epoch will be used.
-                Possible values: Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, None
+            In case of a server timeout, defined by the class-level timeout setting (`set_ntp_timeout()`), the method proceeds to the next server in the list.
+            The default timeout is 1 sec. If no servers respond within the timeout period, the method raises an exception.
 
-        Returns:
-            tuple: 2-tuple(ntp_time, timestamp). First position contains the accurate time(UTC) from the NTP
-                server in nanoseconds since the selected epoch. The second position in the tuple is a timestamp in microseconds taken at the time the
-                request to the server was sent. This timestamp can be used later to compensate for the time difference between the request was sent
-                and the later moment the time is used. The timestamp is the output of time.ticks_us()
+            The time received from the server is adjusted for network delay and converted to the specified epoch time format.
+
+            Args:
+                epoch (int, optional): The epoch year from which the time will be calculated. If None, the epoch set by the user is used.
+                                       Possible values are Ntp.EPOCH_1900, Ntp.EPOCH_1970, Ntp.EPOCH_2000, or None for the user-defined default.
+
+            Returns:
+                tuple: A 2-tuple(ntp_time, timestamp) containing:
+                       1. The adjusted current time from the NTP server in microseconds since the specified epoch.
+                       2. The timestamp in microseconds at the moment the request was sent to the server. This value can be used to compensate for time differences
+                          between when the response was received and when the returned time is used.
+
+            Raises:
+                RuntimeError: If unable to connect to any NTP server from the provided list.
+
+            Note:
+                The function assumes that the list of NTP servers (`cls._hosts`), NTP message template (`cls.__ntp_msg`), and timeout setting (`cls._ntp_timeout_s`)
+                are properly initialized in the class.
         """
 
         if not any(cls._hosts):
@@ -534,9 +546,10 @@ class Ntp:
                 host_addr = socket.getaddrinfo(host, 123)[0][-1]
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.settimeout(cls._ntp_timeout_s)
+                transmin_ts_us = time.ticks_us()  # Record send time (T1)
                 s.sendto(cls.__ntp_msg, host_addr)
-                timestamp = time.ticks_us()
                 s.readinto(cls.__ntp_msg)
+                receive_ts_us = time.ticks_us()  # Record receive time (T2)
             except Exception as e:
                 cls._log('(NTP) Network error: Host({}) Error({})'.format(host, str(e)))
                 continue
@@ -558,20 +571,34 @@ class Ntp:
 
             # Stratum: The stratum field of the NTP packet is an 8-bit field that indicates the stratum level of the server.
             # A value outside the range 1 to 15 indicates an invalid packet.
-            if not (1 <= (cls.__ntp_msg[1] & 0b00000011) <= 15):
+            if not (1 <= (cls.__ntp_msg[1]) <= 15):
                 cls._log('(NTP) Invalid packet due to bad "stratum" field value: Host({})'.format(host))
                 continue
 
-            sec, fraction = struct.unpack('!II', cls.__ntp_msg[40:48])
-            # Transmit Timestamp: The Transmit Timestamp field of the NTP packet is a 64-bit field that contains the server's time when the packet was sent.
-            # If this field is set to zero, it may indicate that the packet is invalid.
-            if sec == 0:
+            # Extract T3 and T4 from the NTP packet
+            # Receive Timestamp (T3): The Receive Timestamp field of the NTP packet is a 64-bit field that contains the server's time when the packet was received.
+            srv_receive_ts_sec, srv_receive_ts_frac = struct.unpack('!II', cls.__ntp_msg[32:40])  # T3
+            # Transmit Timestamp (T4): The Transmit Timestamp field of the NTP packet is a 64-bit field that contains the server's time when the packet was sent.
+            srv_transmit_ts_sec, srv_transmit_ts_frac = struct.unpack('!II', cls.__ntp_msg[40:48])  # T4
+
+            # If any of these fields is zero, it may indicate that the packet is invalid.
+            if srv_transmit_ts_sec == 0 or srv_receive_ts_sec == 0:
                 cls._log('(NTP) Invalid packet: Host({})'.format(host))
                 continue
 
-            sec = sec + cls.epoch_delta(from_epoch = cls.EPOCH_1900, to_epoch = epoch)
-            micro = (fraction * 1_000_000) >> 32
-            return sec * 1_000_000 + micro, timestamp
+            # Convert T3 to microseconds
+            srv_receive_ts_us = srv_receive_ts_sec * 1_000_000 + (srv_receive_ts_frac * 1_000_000 >> 32)
+            # Convert T4 to microseconds
+            srv_transmit_ts_us = srv_transmit_ts_sec * 1_000_000 + (srv_transmit_ts_frac * 1_000_000 >> 32)
+            # Calculate network delay in microseconds
+            network_delay_us = (receive_ts_us - transmin_ts_us) - (srv_transmit_ts_us - srv_receive_ts_us)
+            # Adjust server time (T4) by half of the network delay
+            adjusted_server_time_us = srv_transmit_ts_us - (network_delay_us // 2)
+            # Adjust server time (T4) by the epoch difference
+            adjusted_server_time_us += cls.epoch_delta(from_epoch = cls.EPOCH_1900, to_epoch = epoch) * 1_000_000
+
+            # Return the adjusted server time and the reception time in us
+            return adjusted_server_time_us, receive_ts_us
 
         raise RuntimeError('Can not connect to any of the NTP servers')
 
