@@ -62,6 +62,10 @@ class Ntp:
     WEEKDAY_SAT = const(5)
     WEEKDAY_SUN = const(6)
 
+    SUBSECOND_PRECISION_SEC = const(1000_000)
+    SUBSECOND_PRECISION_MS = const(1000)
+    SUBSECOND_PRECISION_US = const(1)
+
     _log_callback = print  # Callback for message output
     _datetime_callback = None  # Callback for reading/writing the RTC
     _hosts: list = []  # Array of hostnames or IPs
@@ -94,34 +98,116 @@ class Ntp:
                          (_EPOCH_DELTA_1900_2000, _EPOCH_DELTA_1970_2000, 0))
 
     @classmethod
-    def set_datetime_callback(cls, callback):
-        """ Set a callback function for reading and writing an RTC chip. Separation of the low level functions for accessing
-        the RTC allows the library te be chip-agnostic. With this strategy you can manipulate the internal RTC, any
-        external or even multiple RTC chips if you wish.
+    def set_datetime_callback(cls, callback, precision = SUBSECOND_PRECISION_US):
+        """
+        Assigns a callback function for managing a Real Time Clock (RTC) chip.
+        This abstraction allows the library to operate independently of the specific RTC chip used,
+        enabling compatibility with a wide range of RTC hardware, including internal, external,
+        or multiple RTC chips.
+
+        The micropython-ntp library operates with microsecond precision. This method adapts the callback
+        to interface correctly with the library by adjusting the subsecond precision. Ports like the ESP8266,
+       which operate with millisecond precision, can use the 'precision' parameter to set the appropriate
+       subsecond precision level.
 
         Args:
-            callback (function): A callable object. With no arguments, this callable returns an 8-tuple with the
-                current date and time. With 1 argument (being an 8-tuple) it sets the date and time of the RTC. The format
-                of the 8-tuple is (year, month, day, weekday, hour, minute, second, subsecond)
+            callback (function): A callable object designed for RTC communication. It must conform
+                                 to the following specifications:
+                                 - No arguments (getter mode): Returns the current date and time as
+                                   an 8-tuple (year, month, day, weekday, hour, minute, second, subsecond).
+                                 - Single argument (setter mode): Accepts an 8-tuple to set the RTC's
+                                   date and time. The 8-tuple format is detailed below.
+                                 Note: 'weekday' in the 8-tuple is zero-indexed (0 corresponds to Monday).
 
-                !!! NOTE !!!
-                Monday is index 0
+            precision (int): Specifies the subsecond precision in the 8-tuple. It defines how the
+                             subsecond value is adjusted. The constants are:
+                             - SUBSECOND_PRECISION_SEC Default (second-level precision),
+                             - SUBSECOND_PRECISION_MS (millisecond-level precision),
+                             - SUBSECOND_PRECISION_US (microsecond-level precision, default).
+
+        Raises:
+            ValueError: If 'callback' is not a callable object.
+            ValueError: If 'precision' is not one of the predefined constants.
+            ValueError: If the 'callback' does not adhere to the expected input/output format (e.g., does not
+                        return an 8-tuple in getter mode or accept an 8-tuple in setter mode).
+
+        Note:
+            Set this callback before any RTC-related functionality is used in the library.
+            The implementation should be tailored to the specific RTC hardware and communication requirements.
+
+        Callback 8-tuple format:
+            - year (int): Full year including the century (e.g., 2024).
+            - month (int): Month of the year, from 1 (January) to 12 (December).
+            - day (int): Day of the month, from 1 to 31.
+            - weekday (int): Day of the week, from 0 (Monday) to 6 (Sunday).
+            - hour (int): Hour of the day, from 0 to 23.
+            - minute (int): Minute of the hour, from 0 to 59.
+            - second (int): Second of the minute, from 0 to 59.
+            - subsecond (int): Subsecond value, adjusted for precision as per 'precision' parameter.
+
+        Examples:
+               # For ESP32, using default microsecond precision
+               import machine
+               set_datetime_callback(machine.RTC().datetime)
+
+               # For ESP8266, using millisecond precision
+               import machine
+               set_datetime_callback(machine.RTC().datetime, SUBSECOND_PRECISION_MS)
         """
 
         if not callable(callback):
-            ValueError('Invalid parameter: callback={} must be a callable object'.format(callback))
+            raise ValueError('Invalid parameter: callback={} must be a callable object'.format(callback))
 
-        cls._datetime_callback = callback
+        if precision not in (cls.SUBSECOND_PRECISION_SEC, cls.SUBSECOND_PRECISION_MS, cls.SUBSECOND_PRECISION_US):
+            raise ValueError('Invalid parameter: precision={} must be one of SUBSECOND_PRECISION_SEC, SUBSECOND_PRECISION_MS, SUBSECOND_PRECISION_US'.format(precision))
+
+        def precision_adjusted_callback(*args):
+            if len(args) == 0:
+                # Getter mode
+                dt = callback()
+                if isinstance(dt, (tuple, list)) and len(dt) == 8:
+                    return dt[:7] + (dt[7] * precision,)
+                raise ValueError('Invalid callback: In getter mode must return 8-tuple')
+            elif len(args) == 1 and isinstance(args[0], (tuple, list)) and len(args[0]) == 8:
+                # Setter mode
+                dt = args[0]
+                return callback(dt[:7] + (dt[7] // precision,))
+
+            raise ValueError(f'Invalid parameters: {args}. In setter mode expects 8-tuple')
+
+        cls._datetime_callback = precision_adjusted_callback
 
     @classmethod
     def set_logger_callback(cls, callback = print):
-        """ Set a callback function for the logger, it's parameter is a callback function - func(message: str)
-        The default logger is print(). To set it call the setter without any parameters.
-        To disable logging, set the callback to "None".
-
-        Args:
-            callback (function): A callable object. Default value = print; None = disabled logger; Any other value raises exception
         """
+            Configures a custom logging callback for the class. This method allows setting a specific
+            function to handle log messages, replacing the default `print()` function. It can also
+            disable logging by setting the callback to `None`.
+
+            The logger callback function should accept a single string argument, which is the log message.
+            By default, the logger uses Python's built-in `print()` function, which can be overridden by
+            any custom function that takes a string argument. To disable logging, pass `None` as the callback.
+
+            Args:
+                callback (function, optional): A callable object to handle logging. It should accept a
+                                               single string parameter (the log message). The default value
+                                               is `print`, which directs log messages to the standard output.
+                                               Passing `None` disables logging. Any other non-callable value
+                                               raises an exception.
+
+            Raises:
+                ValueError: If 'callback' is neither a callable object nor `None`.
+
+            Usage:
+                # Set a custom logger
+                set_logger_callback(custom_log_function)
+
+                # Disable logging
+                set_logger_callback(None)
+
+                # Use the default logger (print)
+                set_logger_callback()
+            """
 
         if callback is not None and not callable(callback):
             raise ValueError('Invalid parameter: callback={} must be a callable object or None to disable logging'.format(callback))
@@ -276,7 +362,7 @@ class Ntp:
     def set_dst_time_bias(cls, bias: int):
         """ TO BE DEPRECATED. The function is renamed to set_dst_bias(). This name will be deprecated soon
         """
-        set_dst_bias(bias)
+        cls.set_dst_bias(bias)
 
     @classmethod
     def get_dst_time_bias(cls):
@@ -627,7 +713,7 @@ class Ntp:
         # lt = (year, month, day, hour, minute, second, weekday, yearday)
         # index  0      1     2    3      4       5       6         7
 
-        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], ntp_us % 1000_000))
+        cls._datetime((lt[0], lt[1], lt[2], lt[6], lt[3], lt[4], lt[5], ntp_us % 1000_000))
         cls._rtc_last_sync = ntp_us
 
     @classmethod
@@ -809,7 +895,7 @@ class Ntp:
         # lt = (year, month, day, hour, minute, second, weekday, yearday)
         # index  0      1     2    3      4       5       6         7
 
-        cls._datetime((lt[0], lt[1], lt[2], lt[6] + 1, lt[3], lt[4], lt[5], rtc_us % 1000_000))
+        cls._datetime((lt[0], lt[1], lt[2], lt[6], lt[3], lt[4], lt[5], rtc_us % 1000_000))
         cls._drift_last_compensate = rtc_us
 
     @classmethod
@@ -1068,8 +1154,9 @@ class Ntp:
             cls._log_callback(message)
 
     @classmethod
-    def _datetime(cls, dt = None):
-        """ Access the RTC through the callback. This is a setter and getter function.
+    def _datetime(cls, *dt):
+        """ Wrapper around calling the predefined datetime callback. This method
+        functions both as a getter and a setter for datetime information.
 
         Args:
             dt (tuple, None): None or 8-tuple(year, month, day, weekday, hour, minute, second, subsecond)
@@ -1079,13 +1166,11 @@ class Ntp:
         if not callable(cls._datetime_callback):
             raise Exception('No callback set to access the RTC')
 
-        if dt is None:
-            return cls._datetime_callback()
-        elif isinstance(dt, tuple) and len(dt) == 8:
-            cls._datetime_callback(dt)
-        else:
-            raise ValueError(
-                'Invalid parameter: dt={} must be a 8-tuple(year, month, day, weekday, hour, minute, second, subsecond)'.format(dt))
+        try:
+            return cls._datetime_callback(*dt)
+        except Exception as e:
+            cls._log('(RTC) Error. {}'.format(e))
+            raise e
 
     @staticmethod
     def _validate_host(host: str):
