@@ -1,22 +1,7 @@
-try:
-    import usocket as socket
-except ImportError:
-    import socket
-
-try:
-    import ustruct as struct
-except ImportError:
-    import struct
-
-try:
-    import utime as time
-except ImportError:
-    import time
-
-try:
-    import ure as re
-except ImportError:
-    import re
+import socket
+import struct
+import time
+import re
 
 try:
     from micropython import const
@@ -107,8 +92,8 @@ class Ntp:
 
         The micropython-ntp library operates with microsecond precision. This method adapts the callback
         to interface correctly with the library by adjusting the subsecond precision. Ports like the ESP8266,
-       which operate with millisecond precision, can use the 'precision' parameter to set the appropriate
-       subsecond precision level.
+        which operate with millisecond precision, can use the 'precision' parameter to set the appropriate
+        subsecond precision level.
 
         Args:
             callback (function): A callable object designed for RTC communication. It must conform
@@ -359,21 +344,25 @@ class Ntp:
         cls._dst_bias = bias * 60
 
     @classmethod
-    def set_dst_time_bias(cls, bias: int):
-        """ TO BE DEPRECATED. The function is renamed to set_dst_bias(). This name will be deprecated soon
-        """
-        cls.set_dst_bias(bias)
-
-    @classmethod
-    def get_dst_time_bias(cls):
+    def get_dst_bias(cls):
         """ Get Daylight Saving Time bias expressed in minutes.
 
         Returns:
-            int: minutes of the DST bias. Valid values are 30, 60, 90 and 120
+            int: minutes of the DST bias. Valid values are 0, 30, 60, 90 and 120
         """
 
         # Convert to minutes
         return cls._dst_bias // 60
+
+    @classmethod
+    def set_dst_time_bias(cls, bias: int):
+        """ DEPRECATED. The function is renamed to set_dst_bias(). This name will be deprecated soon """
+        cls.set_dst_bias(bias)
+
+    @classmethod
+    def get_dst_time_bias(cls):
+        """ DEPRECATED. The function is renamed to get_dst_bias(). This name will be deprecated soon """
+        return cls.get_dst_bias()
 
     @classmethod
     def dst(cls, dt = None):
@@ -779,7 +768,7 @@ class Ntp:
             raise ValueError('Invalid parameter: new_time={} must be a either None or 2-tuple(time, timestamp)'.format(new_time))
 
         rtc_us = cls.time_us(epoch = cls.device_epoch(), utc = True)
-        # For maximum precision, negate the execution time of all the instructions up to this point
+        # For maximum accuracy, subtract the execution time of all the code up to this point
         ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
         # Calculate the delta between the current time and the last rtc sync or last compensate(whatever occurred last)
         rtc_sync_delta = ntp_us - max(cls._rtc_last_sync, cls._drift_last_compensate)
