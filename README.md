@@ -28,7 +28,7 @@ A robust MicroPython **Time library** for manipulating the **RTC** and and synci
 
 10. Custom Logger with callback function
 
-***!!!At this point all the implemented features are robustly tested and they seem stable enough for production, BUT I do not recommended to use it in a production environment until the API stabilization phase is finished and some unit tests are developed!!!***
+***NOTE: This library has comprehensive unit tests and is actively maintained. However, as with any software, please test thoroughly in your specific environment before production use.***
 
 **Quick Guide**
 
@@ -80,6 +80,24 @@ from ntp import Ntp
 _rtc = RTC()
 Ntp.set_datetime_callback(_rtc.datetime)
 ```
+
+The `set_datetime_callback` method also accepts an optional `precision` parameter to handle RTCs with different subsecond precisions:
+
+```python
+# For ESP32 (default microsecond precision)
+Ntp.set_datetime_callback(_rtc.datetime)
+
+# For ESP8266 (millisecond precision)
+Ntp.set_datetime_callback(_rtc.datetime, precision=Ntp.SUBSECOND_PRECISION_MS)
+
+# For DS3231 (second precision only)
+Ntp.set_datetime_callback(_rtc.datetime, precision=Ntp.SUBSECOND_PRECISION_SEC)
+```
+
+Available precision constants:
+- `Ntp.SUBSECOND_PRECISION_US` - Microsecond precision (default)
+- `Ntp.SUBSECOND_PRECISION_MS` - Millisecond precision
+- `Ntp.SUBSECOND_PRECISION_SEC` - Second precision only
 
 **RTC sync**
 
@@ -230,15 +248,28 @@ drift_every_sec = tick_time * ticks_drift_per_sec = 0.000_01
 
 From the calculation above we know that the RTC can drift +-10us every second. If we know the exact drift, we can calculate the exact deviation from the real time. Unfortunately the exact ppm of every oscillator in unknown and has to be determined per chip manually.
 
-To calculate the drift, the library uses a simpler approach. Every time the RTC is synchronized from NTP, the response is stored in a class variable. When you want to calculate the drift by calling `Ntp.drift_calculate()`, the function reads the current time from NTP and compares it with the stored from the last RTC sync. By knowing the RTC microsecond ticks and the real delta between the NTP queries, calculating the ppm is a trivial task. The longer the period between `Ntp.rtc_sync()` and `Ntp.drift_calculate()` the more accurate result you will get. Empirically I found that in order to get results that vaguely come close to the real, calculating the drift shall be called at least 15 minutes after syncing the RTC.
+To calculate the drift, the library uses a simpler approach. Every time the RTC is synchronized from NTP, the response is stored in a class variable. When you want to calculate the drift by calling `Ntp.drift_calculate()`, the function reads the current time from NTP and compares it with the stored from the last RTC sync. By knowing the RTC microsecond ticks and the real delta between the NTP queries, calculating the ppm is a trivial task. 
+
+The longer the period between `Ntp.rtc_sync()` and `Ntp.drift_calculate()` the more accurate result you will get. **The recommended minimum interval depends on your RTC precision level**:
+
+| RTC Precision Level | Constant                       | Minimum Interval | Recommended Interval |
+|---------------------|--------------------------------|------------------|----------------------|
+| Microsecond         | `SUBSECOND_PRECISION_US` (1)   | 20 minutes       | 2+ hours             |
+| Millisecond         | `SUBSECOND_PRECISION_MS` (1000)| 1 hour           | 12+ hours            |
+| Second              | `SUBSECOND_PRECISION_SEC` (1M) | 24 hours         | Several days         |
+
+Using shorter intervals than recommended may result in highly inaccurate drift calculations, particularly with lower-precision RTCs. **Important:** With second-precision RTCs, short measurement periods will produce meaningless drift values because the measurement error (up to ±0.5 seconds) may far exceed the actual drift. For such RTCs, it's often better to manually set the drift value based on datasheet specifications or long-term observations.
 
 To calculate the drift:
 
 ```python
-Ntp.drift_calculate(new_time = None) -> float
+Ntp.drift_calculate(new_time = None) -> tuple
 ```
 
-The return value is a float where positive values represent a RTC that is speeding, negative values represent RTC that is lagging, and zero means the RTC hasn't drifted at all.
+Returns a 2-tuple `(ppm, us)` where:
+- `ppm` is a float representing the calculated drift in ppm units
+- `us` is an integer containing the absolute drift in microseconds
+Both values can be positive or negative. Positive values represent an RTC that is speeding, while negative values represent an RTC that is lagging.
 
 To get the current drift of the RTC in microseconds:
 
@@ -267,12 +298,12 @@ A NTP sync can be performed at much longer intervals, like a day or week, depend
 Here is a list of all the functions that are managing the drift:
 
 ```python
-Ntp.drift_calculate(cls)
-Ntp.drift_last_compensate()
-Ntp.drift_last_calculate()
-Ntp.drift_ppm()
+Ntp.drift_calculate(new_time = None) -> tuple
+Ntp.drift_last_compensate(epoch: int = None, utc: bool = False) -> int
+Ntp.drift_last_calculate(epoch: int = None, utc: bool = False) -> int
+Ntp.drift_ppm() -> float
 Ntp.set_drift_ppm(ppm: float)
-Ntp.drift_us(ppm_drift: float = None)
+Ntp.drift_us(ppm_drift: float = None) -> int
 Ntp.drift_compensate(compensate_us: int)
 ```
 
@@ -316,7 +347,7 @@ These parameters can be set with just one function `set_dst(start: tuple, end: t
 # start (tuple): 4-tuple(month, week, weekday, hour) start of DST
 # end (tuple) :4-tuple(month, week, weekday, hour) end of DST
 # bias (int): Daylight Saving Time bias expressed in minutes
-Ntp.set_dst(cls, start: tuple = None, end: tuple = None, bias: int = 0)
+Ntp.set_dst(start: tuple = None, end: tuple = None, bias: int = 0)
 
 # Set the start date and time of the DST
 # month (int): number in range 1(Jan) - 12(Dec)
@@ -330,11 +361,12 @@ Ntp.set_dst_start(month: int, week: int, weekday: int, hour: int)
 # week (int): number in range 1 - 6. Sometimes there are months when they can spread over 6 weeks.
 # weekday (int): number in range 0(Mon) - 6(Sun)
 # hour (int): number in range 0 - 23
-Ntp.set_dst_end(cls, month: int, week: int, weekday: int, hour: int)
+Ntp.set_dst_end(month: int, week: int, weekday: int, hour: int)
 
 # Set Daylight Saving Time bias expressed in minutes.
-# bias (int): minutes of the DST bias. Correct values are 30, 60, 90 and 120
-Ntp.set_dst_time_bias(cls, bias: int)
+# bias (int): minutes of the DST bias. Correct values are 0, 30, 60, 90 and 120
+#             Setting to 0 effectively disables DST
+Ntp.set_dst_bias(bias: int)
 ```
 
 You can disable DST functionality by setting any of the start or end date time to `None`
@@ -363,10 +395,10 @@ bool(Ntp.dst())
 The library support setting a custom logger. If you want to redirect the error messages to another destination, set your logger
 
 ```python
-Ntp.set_logger(callback = print)
+Ntp.set_logger_callback(callback = print)
 ```
 
-The default logger is `print()` and to set it just call the method without any parameters.  To disable logging, set the callback to "None"
+The default logger is `print()` and to set it just call the method without any parameters.  To disable logging, set the callback to `None`
 
 # <u>Example</u>
 
@@ -403,14 +435,18 @@ Ntp.set_dst((Ntp.MONTH_MAR, Ntp.WEEK_LAST, Ntp.WEEKDAY_SUN, 3),
 # Syncing the RTC with the time from the NTP servers
 Ntp.rtc_sync()
 
-# Let the RTC drift for 1 minute
-time.sleep(60)
+# Wait appropriate time based on RTC precision
+# For microsecond precision: at least 20 minutes 
+# For millisecond precision: at least 1 hour
+# For second precision: at least 24 hours
+time.sleep(7200)  # 2 hours - reasonable for microsecond precision
 
 # Calculate the RTC drift
-Ntp.drift_calculate()
+drift_ppm, drift_us = Ntp.drift_calculate()
+print(f"Calculated drift: {drift_ppm} PPM, {drift_us} microseconds")
 
-# Let the RTC drift for 1 minute
-time.sleep(60)
+# Wait some time
+time.sleep(3600)  # 1 hour
 
 # Compensate the RTC drift
 Ntp.drift_compensate(Ntp.drift_us())

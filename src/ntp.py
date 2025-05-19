@@ -53,6 +53,7 @@ class Ntp:
 
     _log_callback = print  # Callback for message output
     _datetime_callback = None  # Callback for reading/writing the RTC
+    _datetime_callback_precision = SUBSECOND_PRECISION_US  # Callback precision
     _hosts: list = []  # Array of hostnames or IPs
     _timezone: int = 0  # Timezone offset in seconds
     _rtc_last_sync: int = 0  # Last RTC synchronization timestamp. Uses device's epoch
@@ -145,6 +146,8 @@ class Ntp:
 
         if precision not in (cls.SUBSECOND_PRECISION_SEC, cls.SUBSECOND_PRECISION_MS, cls.SUBSECOND_PRECISION_US):
             raise ValueError('Invalid parameter: precision={} must be one of SUBSECOND_PRECISION_SEC, SUBSECOND_PRECISION_MS, SUBSECOND_PRECISION_US'.format(precision))
+
+        cls._datetime_callback_precision = precision
 
         def precision_adjusted_callback(*args):
             if len(args) == 0:
@@ -703,7 +706,8 @@ class Ntp:
         # index  0      1     2    3      4       5       6         7
 
         cls._datetime((lt[0], lt[1], lt[2], lt[6], lt[3], lt[4], lt[5], ntp_us % 1000_000))
-        cls._rtc_last_sync = ntp_us
+        # Store the precision-adjusted value to match what RTC actually stores
+        cls._rtc_last_sync = (ntp_us // cls._datetime_callback_precision) * cls._datetime_callback_precision
 
     @classmethod
     def rtc_last_sync(cls, epoch: int = None, utc: bool = False):
@@ -770,6 +774,7 @@ class Ntp:
         rtc_us = cls.time_us(epoch = cls.device_epoch(), utc = True)
         # For maximum accuracy, subtract the execution time of all the code up to this point
         ntp_us = new_time[0] + (time.ticks_us() - new_time[1])
+        
         # Calculate the delta between the current time and the last rtc sync or last compensate(whatever occurred last)
         rtc_sync_delta = ntp_us - max(cls._rtc_last_sync, cls._drift_last_compensate)
         rtc_ntp_delta = rtc_us - ntp_us
